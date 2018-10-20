@@ -1,5 +1,15 @@
+#include "libsim-ocl.h"
+
 #include <stdio.h>
 #include <CL/cl.h>
+
+void initialize_simulator() {
+    if (is_simulator_initialized) {
+        return;
+    }
+
+
+}
 
 cl_int clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms) {
     return CL_SUCCESS;
