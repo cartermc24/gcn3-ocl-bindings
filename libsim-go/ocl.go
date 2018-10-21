@@ -1,4 +1,4 @@
-package gcn3simocl
+package main
 
 /*
 */
@@ -11,6 +11,7 @@ import (
     "gitlab.com/akita/gcn3/driver"
     "gitlab.com/akita/gcn3/insts"
     "gitlab.com/akita/gcn3/kernels"
+    "gitlab.com/akita/gcn3/platform"
 )
 
 
@@ -53,7 +54,8 @@ type CLKernelArg struct {
 func initializeSimulator() {
     buffer_map = make(map[int]*driver.GPUPtr)
     kernel_map = make(map[int]*CLKernel)
-    program_map  = make(map[int]*CLProgram)
+    program_map = make(map[int]*CLProgram)
+    _, _,sim_driver,_ = platform.BuildEmuPlatform()
 }
 
 
@@ -98,7 +100,7 @@ func gcn3CreateProgramWithSource(context int, program_string string) int {
 //export gcn3BuildProgram
 func gcn3BuildProgram(program_id int) int {
     // FIXME actually build program
-    hsacoBytes, err := ioutil.ReadFile("myfirstkernel.hsaco")
+    hsacoBytes, err := ioutil.ReadFile("/home/shance/Documents/gpu-research/myfirstkernel.hsaco")
     if (err != nil) {
         return -11 // CL_BUILD_PROGRAM_FAILURE
     }
@@ -127,7 +129,6 @@ func gcn3CreateKernel(program_id int, kernel_name string) int {
 
     return kernel_idx - 1
 }
-
 
 
 // Returns Buffer ID
@@ -247,3 +248,6 @@ func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_si
 
     return 1 // CL_SUCCESS
 }
+
+
+func main() {} // Required but ignored

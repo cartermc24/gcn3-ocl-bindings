@@ -14,7 +14,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include "_cgo_export.h"
+#include "ocl.h"
 
 // ------TYPES------------
 struct gpu_detail {
