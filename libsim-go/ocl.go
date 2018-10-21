@@ -49,7 +49,7 @@ type CLKernelArg struct {
 }
 
 
-
+//export initializeSimulator
 func initializeSimulator() {
     buffer_map = make(map[int]*driver.GPUPtr)
     kernel_map = make(map[int]*CLKernel)
@@ -60,14 +60,17 @@ func initializeSimulator() {
 //
 // OpenCL API
 //
+//export gcn3GetPlatformIDs
 func gcn3GetPlatformIDs() int {
     return platform_id
 }
 
+//export gcn3GetDeviceIDs
 func gcn3GetDeviceIDs() int {
     return device_id
 }
 
+//export gcn3CreateContext
 func gcn3CreateContext() int {
     return context_id
 }
@@ -75,6 +78,7 @@ func gcn3CreateContext() int {
 //func gcn3CreateCommandQueue
 
 // Returns Kernel ID
+//export gcn3CreateProgramWithSource
 func gcn3CreateProgramWithSource(context int, program_string string) int {
     if (context != context_id) {
         return -34 // CL_INVALID_CONTEXT
@@ -91,6 +95,7 @@ func gcn3CreateProgramWithSource(context int, program_string string) int {
 }
 
 
+//export gcn3BuildProgram
 func gcn3BuildProgram(program_id int) int {
     // FIXME actually build program
     hsacoBytes, err := ioutil.ReadFile("myfirstkernel.hsaco")
@@ -104,6 +109,7 @@ func gcn3BuildProgram(program_id int) int {
 }
 
 
+//export gcn3CreateKernel
 func gcn3CreateKernel(program_id int, kernel_name string) int {
     program := program_map[program_id].program
 
@@ -126,6 +132,7 @@ func gcn3CreateKernel(program_id int, kernel_name string) int {
 
 // Returns Buffer ID
 // Size in bytes
+//export gcn3CreateBuffer
 func gcn3CreateBuffer(context int, size int) int {
     if (context != context_id) {
         return -34 // CL_INVALID_CONTEXT
@@ -139,6 +146,7 @@ func gcn3CreateBuffer(context int, size int) int {
 }
 
 
+//export gcn3EnqueueWriteBuffer
 func gcn3EnqueueWriteBuffer(buffer int, size int, ptr unsafe.Pointer) int {
     sim_buffer := buffer_map[buffer]
 
@@ -158,6 +166,7 @@ func gcn3EnqueueWriteBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 }
 
 
+//export gcn3EnqueueReadBuffer
 func gcn3EnqueueReadBuffer(buffer int, size int, ptr unsafe.Pointer) int {
     sim_buffer := buffer_map[buffer]
 
@@ -179,6 +188,7 @@ func gcn3EnqueueReadBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 }
 
 
+//export gcn3SetKernelArg
 func gcn3SetKernelArg(kernel int, arg_idx int, size int, ptr unsafe.Pointer) int {
     cl_kernel := kernel_map[kernel]
     arg_list := cl_kernel.arg_list
@@ -194,7 +204,19 @@ func gcn3SetKernelArg(kernel int, arg_idx int, size int, ptr unsafe.Pointer) int
 }
 
 
-func gcn3LaunchKernel(kernel int, global_work_size [3]uint32, local_work_size [3]uint16) int {
+// global_work_size is type uint32
+// local_work_size is type uint16
+//export gcn3LaunchKernel
+func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_size unsafe.Pointer) int {
+    var grid_args [3]uint32
+    var work_args [3]uint16
+
+    // Copy data over
+    for i := 0; i < 3; i++ {
+        grid_args[i] = *(*uint32) (unsafe.Pointer(uintptr(global_work_size) + uintptr(4))) //uint32
+        work_args[i] = *(*uint16) (unsafe.Pointer(uintptr(local_work_size) + uintptr(2))) //uint16
+    }
+
     cl_kernel := kernel_map[kernel]
     sim_kernel := cl_kernel.kernel
     arg_list := cl_kernel.arg_list
@@ -221,7 +243,7 @@ func gcn3LaunchKernel(kernel int, global_work_size [3]uint32, local_work_size [3
         all_args = append(all_args, kernel_arg.bytes...)
     }
 
-    sim_driver.LaunchKernel(sim_kernel, global_work_size, local_work_size, all_args)
+    sim_driver.LaunchKernel(sim_kernel, grid_args, work_args, all_args)
 
     return 1 // CL_SUCCESS
 }
