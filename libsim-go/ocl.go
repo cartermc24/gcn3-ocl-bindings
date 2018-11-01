@@ -6,6 +6,7 @@ import "C"
 import (
 	"container/list"
 	"encoding/binary"
+	"fmt"
 	"io/ioutil"
 	"reflect"
 	"unsafe"
@@ -82,11 +83,13 @@ func createKernelArgInterface(args []CLKernelArg) interface{} {
 //
 // Helpers
 //
+//export initializeSimulator
 func initializeSimulator() {
 	buffer_map = make(map[int]*driver.GPUPtr)
 	kernel_map = make(map[int]*CLKernel)
 	program_map = make(map[int]*CLProgram)
 	_, _, sim_driver, _ = platform.BuildEmuPlatform()
+	fmt.Println("[ocl-wrapper] Simulator Initialized\n")
 }
 
 // Convert CLKernelArg struct slice into raw bytes
@@ -145,6 +148,7 @@ func gcn3CreateContext() int {
 //export gcn3CreateProgramWithSource
 func gcn3CreateProgramWithSource(context int, program_string string) int {
 	if context != context_id {
+		fmt.Println("[ocl-wrapper] Error creating program from source: invalid context")
 		return -34 // CL_INVALID_CONTEXT
 	}
 
@@ -155,29 +159,37 @@ func gcn3CreateProgramWithSource(context int, program_string string) int {
 
 	program_idx += 1
 
+	fmt.Printf("[ocl-wrapper] Created program with ID %v\n", program_idx-1)
+
 	return program_idx - 1
 }
 
 //export gcn3BuildProgram
 func gcn3BuildProgram(program_id int) int {
 	// FIXME actually build program
-	hsacoBytes, err := ioutil.ReadFile("/home/shance/Documents/gpu-research/myfirstkernel.hsaco")
+	hsacoBytes, err := ioutil.ReadFile("/home/shance/Documents/gpu-research/gcn3-ocl-bindings/examples/AES-OpenCL/myfirstkernel.hsaco")
 	if err != nil {
+		fmt.Printf("[ocl-wrapper] Error building program: %v\n", err)
 		return -11 // CL_BUILD_PROGRAM_FAILURE
 	}
 
 	program_map[program_id].program = hsacoBytes
 
+	fmt.Printf("[ocl-wrapper] Built program with ID %v\n", program_id)
 	return 1 // CL_SUCCESS
 }
 
 //export gcn3CreateKernel
 func gcn3CreateKernel(program_id int, kernel_name string) int {
+
+	fmt.Println("[ocl-wrapper] Attempting to create kernel")
 	program := program_map[program_id].program
 
 	cl_kernel := CLKernel{}
 	kernel := kernels.LoadProgramFromMemory(program, kernel_name)
+
 	if kernel == nil {
+		fmt.Println("[ocl-wrapper] Unable to get kernel from program")
 		return -46 // CL_INVALID_KERNEL_NAME
 	}
 
@@ -187,6 +199,7 @@ func gcn3CreateKernel(program_id int, kernel_name string) int {
 
 	kernel_idx += 1
 
+	fmt.Printf("[ocl-wrapper] Created kernel with name: %v, ID: %v\n", kernel_name, kernel_idx-1)
 	return kernel_idx - 1
 }
 
@@ -202,6 +215,8 @@ func gcn3CreateBuffer(context int, size int) int {
 	buffer_map[buffer_idx] = &new_buffer
 
 	buffer_idx += 1
+
+	fmt.Printf("[ocl-wrapper] Allocated buffer of size: %v, wrapper ID: %v, sim addr: %v\n", size, buffer_idx-1, new_buffer)
 	return buffer_idx - 1
 }
 
@@ -213,6 +228,7 @@ func gcn3EnqueueWriteBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 
 	sim_driver.MemoryCopyHostToDevice(*sim_buffer, ptr_bytes)
 
+	fmt.Printf("[ocl-wrapper] Enqueued Write Buffer for buffer ID %v\n", buffer)
 	return 0 // CL_SUCCESS
 }
 
@@ -223,6 +239,8 @@ func gcn3EnqueueReadBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 	ptr_bytes := C.GoBytes(ptr, C.int(size))
 
 	sim_driver.MemoryCopyDeviceToHost(ptr_bytes, *sim_buffer)
+
+	fmt.Printf("[ocl-wrapper] Enqueued Read Buffer for buffer ID %v\n", buffer)
 
 	return 0 // CL_SUCCESS
 }
@@ -247,6 +265,8 @@ func gcn3SetKernelArg(kernel int, arg_idx int, size int, ptr unsafe.Pointer) int
 	}
 
 	arg_list.PushBack(cl_kernel_arg)
+
+	fmt.Printf("[ocl-wrapper] Set Kernel Arg, Kernel ID: %v, arg_idx: %v,  size: %v, value: %v, type: %v\n", kernel, arg_idx, size, ptr, cl_kernel_arg.arg_type)
 
 	return 0 // CL_SUCCESS
 }
