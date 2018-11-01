@@ -7,6 +7,7 @@ import (
     "unsafe"
     "container/list"
     "io/ioutil"
+    "reflect"
 
     "gitlab.com/akita/gcn3/driver"
     "gitlab.com/akita/gcn3/insts"
@@ -21,7 +22,7 @@ var program_map map[int]*CLProgram
 var buffer_map map[int]*driver.GPUPtr
 var kernel_map map[int]*CLKernel
 var program_idx int = 0
-var buffer_idx int = 0
+var buffer_idx int = 1 // Start at one to avoid conflict with C's NULL
 var kernel_idx int = 0
 
 // Hardcoded value
@@ -43,10 +44,41 @@ type CLKernel struct {
     kernel *insts.HsaCo
 }
 
+/*
+    CLKernelArg Types
+    0 -> Global Ptr
+    1 -> Local Ptr
+    2 -> Primitive
+*/
 type CLKernelArg struct {
     idx int
     size int
-    bytes []byte
+    ptr_val unsafe.Pointer
+    arg_type int
+}
+
+
+// 
+func createKernelArgInterface(args []CLKernelArg) interface{} {
+    f := make([]reflect.StructField, len(args))
+    for i, _ := range args {
+        arg_type := args[i].arg_type
+
+        if arg_type == 0 {
+            f[i].Type = reflect.TypeOf((*driver.GPUPtr) (nil)).Elem()
+        } else {
+            f[i].Type = reflect.TypeOf((*driver.LocalPtr) (nil)).Elem()
+        }
+
+        //f[i].Type = reflect.TypeOf(u)
+        f[i].Anonymous = true
+    }
+
+    r := reflect.New(reflect.StructOf(f)).Elem()
+    for i, u := range args {
+        r.Field(i).Set(reflect.ValueOf(u))
+    }
+    return r.Addr().Interface()
 }
 
 
@@ -197,7 +229,16 @@ func gcn3SetKernelArg(kernel int, arg_idx int, size int, ptr unsafe.Pointer) int
     cl_kernel_arg.idx = arg_idx
     cl_kernel_arg.size = size
     //cl_kernel_arg.bytes = *((*[size]byte) (ptr))
-    cl_kernel_arg.bytes = C.GoBytes(ptr, C.int(size))
+    //cl_kernel_arg.bytes = C.GoBytes(ptr, C.int(size))
+    cl_kernel_arg.ptr_val = ptr
+
+    test := unsafe.Sizeof(reflect.TypeOf((int) (0)))
+
+    if uintptr(size) > test {
+        cl_kernel_arg.arg_type = 1
+    } else {
+        cl_kernel_arg.arg_type = 0
+    }
 
     arg_list.PushBack(cl_kernel_arg)
 
@@ -239,12 +280,15 @@ func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_si
         args[new_idx] = kernel_arg
     }
 
+    /*
     var all_args []byte
     for _, kernel_arg := range args {
         all_args = append(all_args, kernel_arg.bytes...)
     }
+    */
+    kernel_arg_interface := createKernelArgInterface(args)
 
-    sim_driver.LaunchKernel(sim_kernel, grid_args, work_args, all_args)
+    sim_driver.LaunchKernel(sim_kernel, grid_args, work_args, kernel_arg_interface)
 
     return 1 // CL_SUCCESS
 }
