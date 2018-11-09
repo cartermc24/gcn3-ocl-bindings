@@ -5,8 +5,16 @@
 #ifndef LIBSIM_OCL_LIBSIM_OCL_H
 #define LIBSIM_OCL_LIBSIM_OCL_H
 
+#ifdef __APPLE__
+#include <OpenCL/cl.h>
+#else
+#include <CL/cl.h>
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include "ocl.h"
 
 // ------TYPES------------
 struct gpu_detail {
