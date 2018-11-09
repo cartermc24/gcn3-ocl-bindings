@@ -148,7 +148,7 @@ cl_int clSetKernelArg(cl_kernel kernel,
                       cl_uint arg_index,
                       size_t arg_size,
                       const void *arg_value) {
-    initialize_simulator(); 
+    initialize_simulator();
     return (cl_int)gcn3SetKernelArg((GoInt)kernel, (GoInt)arg_index, (GoInt)arg_size, arg_value);
 }
 
