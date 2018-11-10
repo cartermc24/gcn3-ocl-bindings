@@ -39,7 +39,7 @@ cl_context clCreateContext(const cl_context_properties *properties,
                 void (CL_CALLBACK *pfn_notify)(const char *, const void *, size_t, void *),
                 void *user_data,
                 cl_int *errcode_ret) {
-    *errcode_ret = CL_SUCCESS;
+    if (errcode_ret != NULL) { *errcode_ret = CL_SUCCESS; }
     initialize_simulator(); 
     return (cl_context)gcn3CreateContext();
 }
@@ -49,7 +49,7 @@ cl_command_queue clCreateCommandQueue(cl_context context,
                                       cl_command_queue_properties properties,
                                       cl_int *errcode_ret) {
     initialize_simulator(); 
-    *errcode_ret = CL_SUCCESS;
+    if (errcode_ret != NULL) { *errcode_ret = CL_SUCCESS; }
     cl_command_queue queue;
     return queue;
 }
@@ -73,14 +73,21 @@ cl_program clCreateProgramWithSource(cl_context context,
     initialize_simulator(); 
     GoString string;
     string.p = strings[0];
-    string.n = lengths[0];
+
+    if (lengths != NULL) {
+        string.n = lengths[0];
+    } else {
+	string.n = strlen(strings[0]);
+    }
+
+    //printf("[ocl-wrapper-C]: Got %u source strings with len %i\n", count, string.n);
 
     int response = (int)gcn3CreateProgramWithSource((GoInt)context, string);
     if (response < 0) {
-        *errcode_ret = response;
+        if (errcode_ret != NULL) { *errcode_ret = response; }
         return NULL;
     } else {
-        *errcode_ret = CL_SUCCESS;
+        if (errcode_ret != NULL) { *errcode_ret = CL_SUCCESS; }
         return response;
     }
 
@@ -116,10 +123,10 @@ cl_mem clCreateBuffer(cl_context context,
 
     int buffer_desc = (int)gcn3CreateBuffer((GoInt)context, (GoInt)size);
     if (buffer_desc < 0) {
-        *errcode_ret = buffer_desc;
+        if (errcode_ret != NULL) { *errcode_ret = buffer_desc; }
         return NULL;
     } else {
-        *errcode_ret = CL_SUCCESS;
+        if (errcode_ret != NULL) { *errcode_ret = CL_SUCCESS; }
         return buffer_desc;
     }
 }
@@ -136,10 +143,10 @@ cl_kernel clCreateKernel(cl_program program,
     int kernel_desc = (int)gcn3CreateKernel((GoInt)program, string);
 
     if (kernel_desc < 0) {
-        *errcode_ret = kernel_desc;
+        if (errcode_ret != NULL) { *errcode_ret = kernel_desc; }
         return NULL;
     } else {
-        *errcode_ret = CL_SUCCESS;
+        if (errcode_ret != NULL) { *errcode_ret = CL_SUCCESS; }
         return kernel_desc;
     }
 }
@@ -163,15 +170,20 @@ cl_int clEnqueueNDRangeKernel(cl_command_queue command_queue,
                               cl_event *event) {
     initialize_simulator(); 
 
-    uint32_t l_global_work_size[3] = { 1 };
-    uint16_t l_local_work_size[3] = { 1 };
+    uint32_t l_global_work_size[3];
+    uint16_t l_local_work_size[3];
+
+    for (int i = 0; i < 3; i++) {
+	    l_global_work_size[i] = 1;
+	    l_local_work_size[i] = 1;
+    }
 
     for (int i = 0; i < work_dim; i++) {
         l_global_work_size[i] = (uint32_t)global_work_size[i];
         l_local_work_size[i] = (uint16_t)local_work_size[i];
     }
 
-    return (cl_int)gcn3LaunchKernel((GoInt)kernel, &l_global_work_size, &l_local_work_size);
+    return (cl_int)gcn3LaunchKernel((GoInt)kernel, l_global_work_size, l_local_work_size);
 }
 
 cl_int clWaitForEvents(cl_uint num_events,

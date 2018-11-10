@@ -5,7 +5,7 @@ package main
 import "C"
 import (
 	"container/list"
-//	"encoding/binary"
+	"encoding/binary"
 	"fmt"
 	"io/ioutil"
 	"reflect"
@@ -99,7 +99,7 @@ func convertArgsToBytes(cl_kernel_args []CLKernelArg) []byte {
 	var all_args []byte
 	for i, kernel_arg := range cl_kernel_args {
 		arg_bytes := make([]byte, unsafe.Sizeof(kernel_arg.ptr_val))
-	//	binary.LittleEndian.PutUint64(arg_bytes, uint64(kernel_arg.ptr_val)) // FIXME assumes 64-bit platform	
+		binary.LittleEndian.PutUint64(arg_bytes, uint64(kernel_arg.ptr_val)) // FIXME assumes 64-bit platform	
 		fmt.Printf("[ocl-wrapper] Argument %i has bytes: [%s]\n", i, hex.Dump(arg_bytes))
 		all_args = append(all_args, arg_bytes...)
 	}
@@ -171,7 +171,7 @@ func gcn3CreateProgramWithSource(context int, program_string string) int {
 //export gcn3BuildProgram
 func gcn3BuildProgram(program_id int) int {
 	// FIXME actually build program
-	hsacoBytes, err := ioutil.ReadFile("/home/carter/simulator/AES-OpenCL/myfirstkernel.hsaco")
+	hsacoBytes, err := ioutil.ReadFile("/home/carter/simulator/gcn3-ocl-bindings/examples/vector-add/myfirstkernel.hsaco")
 	if err != nil {
 		fmt.Printf("[ocl-wrapper] Error building program: %v\n", err)
 		return -11 // CL_BUILD_PROGRAM_FAILURE
@@ -232,7 +232,7 @@ func gcn3EnqueueWriteBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 
 	sim_driver.MemoryCopyHostToDevice(*sim_buffer, ptr_bytes)
 
-	fmt.Printf("[ocl-wrapper] Wrote data to device: [%s] @ region: %02x\n", hex.Dump(ptr_bytes), *sim_buffer)
+	//fmt.Printf("[ocl-wrapper] Wrote data to device: [%s] @ region: %02x\n", hex.Dump(ptr_bytes), *sim_buffer)
 
 	fmt.Printf("[ocl-wrapper] Enqueued Write Buffer for buffer ID %v\n", buffer)
 	return 0 // CL_SUCCESS
@@ -244,7 +244,7 @@ func gcn3EnqueueReadBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 
 	ptr_bytes := C.GoBytes(ptr, C.int(size))
 
-	fmt.Printf("[ocl-wrapper] Fetched data from device: [%s] @ region %02x\n", hex.Dump(ptr_bytes), *sim_buffer)
+	//fmt.Printf("[ocl-wrapper] Fetched data from device: [%s] @ region %02x\n", hex.Dump(ptr_bytes), *sim_buffer)
 
 	sim_driver.MemoryCopyDeviceToHost(ptr_bytes, *sim_buffer)
 
@@ -262,7 +262,7 @@ func gcn3SetKernelArg(kernel int, arg_idx int, size int, ptr unsafe.Pointer) int
 	cl_kernel_arg.size = size
 	//cl_kernel_arg.bytes = *((*[size]byte) (ptr))
 	//cl_kernel_arg.bytes = C.GoBytes(ptr, C.int(size))
-	cl_kernel_arg.ptr_val = uint64(uintptr(ptr))
+	cl_kernel_arg.ptr_val = *(*uint64)(ptr) //uint64(uintptr(ptr))
 
 	test := unsafe.Sizeof(reflect.TypeOf((int)(0)))
 
@@ -274,7 +274,7 @@ func gcn3SetKernelArg(kernel int, arg_idx int, size int, ptr unsafe.Pointer) int
 
 	arg_list.PushBack(cl_kernel_arg)
 
-	fmt.Printf("[ocl-wrapper] Set Kernel Arg, Kernel ID: %v, arg_idx: %v,  size: %v, value: %v, type: %v\n", kernel, arg_idx, size, ptr, cl_kernel_arg.arg_type)
+	fmt.Printf("[ocl-wrapper] Set Kernel Arg, Kernel ID: %v, arg_idx: %v,  size: %v, value: %v, type: %v\n", kernel, arg_idx, size, cl_kernel_arg.ptr_val, cl_kernel_arg.arg_type)
 
 	return 0 // CL_SUCCESS
 }
@@ -286,10 +286,13 @@ func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_si
 	var grid_args [3]uint32
 	var work_args [3]uint16
 
+	global := *(*[3]uint32)(global_work_size)
+	local := *(*[3]uint16)(local_work_size)
+
 	// Copy data over
 	for i := 0; i < 3; i++ {
-		grid_args[i] = 1//*(*uint32)(unsafe.Pointer(uintptr(global_work_size) + uintptr(4))) //uint32
-		work_args[i] = 1//*(*uint16)(unsafe.Pointer(uintptr(local_work_size) + uintptr(2)))  //uint16
+		grid_args[i] = global[i] //*(*uint32)(global_work_size) //uint32
+		work_args[i] = local[i] //*(*uint16)(local_work_size)  //uint16
 		fmt.Printf("[ocl-wrapper] Dimention: %i, global: %u, local: %u\n", i, grid_args[i], work_args[i])
 	}
 
