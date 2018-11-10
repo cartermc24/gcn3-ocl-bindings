@@ -10,6 +10,10 @@ import (
 	"io/ioutil"
 	"reflect"
 	"unsafe"
+	"os"
+	"os/user"
+	"os/exec"
+	"bytes"
 	"encoding/hex"
 
 	"gitlab.com/akita/gcn3/driver"
@@ -170,8 +174,43 @@ func gcn3CreateProgramWithSource(context int, program_string string) int {
 
 //export gcn3BuildProgram
 func gcn3BuildProgram(program_id int) int {
-	// FIXME actually build program
-	hsacoBytes, err := ioutil.ReadFile("/home/carter/simulator/gcn3-ocl-bindings/examples/vector-add/myfirstkernel.hsaco")
+	// Write program source to file
+	fmt.Printf("[ocl-wrapper] Writing CL source to temporary file\n")
+	program_bytes := []byte(program_map[program_id].program_string)
+	write_err := ioutil.WriteFile("/tmp/prog.cl", program_bytes, 0644)
+	if write_err != nil {
+		fmt.Fprintf(os.Stderr, "[ocl-wrapper] Error: could not write CL source to /tmp\n")
+		return -11 // CL_BUILD_PROGRAM_FAILURE
+	}
+
+	// Run compiler
+	fmt.Printf("[ocl-wrapper] Running clang-ocl\n")
+	usr, usr_err := user.Current()
+	if usr_err != nil {
+		fmt.Fprintf(os.Stderr, "[ocl-wrapper] Error: unable to get user information to locate compiler\n")
+		return -11 // CL_BUILD_PROGRAM_FAILURE
+	}
+	compiler_root := usr.HomeDir + "/.clangocl/clang-ocl"
+
+	compiler := exec.Command(compiler_root, "-mcpu=gfx803", "-o", "/tmp/prog.hsaco", "/tmp/prog.cl")
+
+	var stderr bytes.Buffer
+	compiler.Stderr = &stderr
+	err := compiler.Run()
+
+	if err != nil && err.Error() == "exit status 1" {
+		fmt.Fprintf(os.Stderr, "[ocl-wrapper] Error: clang-ocl reported compiler errors:\n")
+		fmt.Fprintf(os.Stderr, stderr.String())
+		fmt.Fprintf(os.Stderr, "\n")
+		return -11 // CL_BUILD_PROGRAM_FAILURE
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[ocl-wrapper] Error: could not invoke compiler, ensure clang-ocl exists at ~/.clangocl/clang-ocl, error: %s\n", err)
+		return -11 // CL_BUILD_PROGRAM_FAILURE
+	}
+
+	fmt.Printf("[ocl-wrapper] CL source successfully compiled\n")
+	hsacoBytes, err := ioutil.ReadFile("/tmp/prog.hsaco")
 	if err != nil {
 		fmt.Printf("[ocl-wrapper] Error building program: %v\n", err)
 		return -11 // CL_BUILD_PROGRAM_FAILURE
