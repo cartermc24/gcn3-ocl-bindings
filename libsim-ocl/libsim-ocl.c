@@ -232,3 +232,108 @@ cl_int clReleaseCommandQueue(cl_command_queue command_queue) {
     initialize_simulator(); 
     return CL_SUCCESS;
 }
+
+cl_program clCreateProgramWithBinary(cl_context context,
+				     cl_uint num_devices,
+				     const cl_device_id *device_list,
+				     const size_t *lengths,
+				     const unsigned char **binaries,
+				     cl_int *binary_status,
+				     cl_int *errcode_ret) {
+    initialize_simulator();
+    return 0;
+}
+
+cl_int clGetProgramInfo(cl_program program,
+		        cl_program_info param_name,
+			size_t param_value_size,
+			void *param_value,
+			size_t *param_value_size_ret) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
+
+cl_int clCreateKernelsInProgram(cl_program program,
+				cl_uint num_kernels,
+				cl_kernel *kernels,
+				cl_uint *num_kernels_ret) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
+
+cl_int clGetKernelInfo(cl_kernel kernel,
+  		       cl_kernel_info param_name,
+  		       size_t param_value_size,
+  	               void *param_value,
+  		       size_t *param_value_size_ret) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
+
+cl_int clEnqueueTask(cl_command_queue command_queue,
+  		     cl_kernel kernel,
+  		     cl_uint num_events_in_wait_list,
+  		     const cl_event *event_wait_list,
+  		     cl_event *event) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
+
+cl_int clRetainCommandQueue(cl_command_queue command_queue) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
+
+cl_int clRetainMemObject(cl_mem memobj) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
