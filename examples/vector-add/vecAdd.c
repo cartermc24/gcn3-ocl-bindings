@@ -6,9 +6,9 @@
 // OpenCL kernel. Each work item takes care of one element of c
 const char *kernelSource =                                       "\n" \
 "#pragma OPENCL EXTENSION cl_khr_fp64 : enable                    \n" \
-"__kernel void vecAdd(  __global double *a,                       \n" \
-"                       __global double *b,                       \n" \
-"                       __global double *c,                       \n" \
+"__kernel void vecAdd(  __global int *a,                       \n" \
+"                       __global int *b,                       \n" \
+"                       __global int *c,                       \n" \
 "                       const unsigned int n)                    \n" \
 "{                                                               \n" \
 "    //Get our global thread ID                                  \n" \
@@ -26,10 +26,10 @@ int main( int argc, char* argv[] )
     unsigned int n = 100000;
  
     // Host input vectors
-    double *h_a;
-    double *h_b;
+    int *h_a;
+    int *h_b;
     // Host output vector
-    double *h_c;
+    int *h_c;
  
     // Device input buffers
     cl_mem d_a;
@@ -45,19 +45,19 @@ int main( int argc, char* argv[] )
     cl_kernel kernel;                 // kernel
  
     // Size, in bytes, of each vector
-    size_t bytes = n*sizeof(double);
+    size_t bytes = n*sizeof(int);
  
     // Allocate memory for each vector on host
-    h_a = (double*)malloc(bytes);
-    h_b = (double*)malloc(bytes);
-    h_c = (double*)malloc(bytes);
+    h_a = (int*)malloc(bytes);
+    h_b = (int*)malloc(bytes);
+    h_c = (int*)malloc(bytes);
  
     // Initialize vectors on host
     int i;
     for( i = 0; i < n; i++ )
     {
-        h_a[i] = sinf(i)*sinf(i);
-        h_b[i] = cosf(i)*cosf(i);
+        h_a[i] = 50;//sinf(i)*sinf(i);
+        h_b[i] = 1;//cosf(i)*cosf(i);
     }
  
     size_t globalSize, localSize;
@@ -120,10 +120,10 @@ int main( int argc, char* argv[] )
                                 bytes, h_c, 0, NULL, NULL );
  
     //Sum up vector c and print result divided by n, this should equal 1 within error
-    double sum = 0;
+    int sum = 0;
     for(i=0; i<n; i++)
         sum += h_c[i];
-    printf("final result: %f\n", sum/(double)n);
+    printf("final result: %i\n", sum/(int)n);
  
     // release OpenCL resources
     clReleaseMemObject(d_a);

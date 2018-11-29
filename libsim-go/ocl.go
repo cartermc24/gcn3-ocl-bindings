@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io/ioutil"
-	"reflect"
 	"unsafe"
 	"os"
 	"os/user"
@@ -25,7 +24,7 @@ import (
 // Globals
 var sim_driver *driver.Driver
 var program_map map[int]*CLProgram
-var buffer_map map[int]*driver.GPUPtr // TODO update to just uint32
+var buffer_map map[int]*driver.GPUPtr
 var kernel_map map[int]*CLKernel
 var program_idx int = 0
 var buffer_idx int = 1 // Start at one to avoid conflict with C's NULL
@@ -52,8 +51,9 @@ type CLKernel struct {
 
 /*
    CLKernelArg Types
-   0 -> GlobalPtr/Primitive
+   0 -> GlobalPtr
    1 -> LocalPtr
+   2 -> Primative
 */
 type CLKernelArg struct {
 	idx      int
@@ -102,10 +102,35 @@ func initializeSimulator() {
 func convertArgsToBytes(cl_kernel_args []CLKernelArg) []byte {
 	var all_args []byte
 	for i, kernel_arg := range cl_kernel_args {
-		arg_bytes := make([]byte, unsafe.Sizeof(kernel_arg.ptr_val))
+		arg_bytes := make([]byte, 8)//unsafe.Sizeof(kernel_arg.ptr_val))
 		binary.LittleEndian.PutUint64(arg_bytes, uint64(kernel_arg.ptr_val)) // FIXME assumes 64-bit platform	
 		fmt.Printf("[ocl-wrapper] Argument %i has bytes: [%s]\n", i, hex.Dump(arg_bytes))
 		all_args = append(all_args, arg_bytes...)
+	}
+
+	/*
+	arg_bytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(arg_bytes, 0)
+	all_args = append(all_args, arg_bytes...)
+
+	arg_bytes = make([]byte, 8)
+	binary.LittleEndian.PutUint64(arg_bytes, 400000)
+	all_args = append(all_args, arg_bytes...)
+
+	arg_bytes = make([]byte, 8)
+	binary.LittleEndian.PutUint64(arg_bytes, 800000)
+	all_args = append(all_args, arg_bytes...)
+
+	arg_bytes = make([]byte, 4)
+	binary.LittleEndian.PutUint32(arg_bytes, 100000)
+	all_args = append(all_args, arg_bytes...)
+	*/
+
+	offsets := make([]byte, 192)
+	all_args = append(all_args, offsets...)
+
+	if len(all_args) % 64 != 0 {
+		fmt.Printf("[ocl-wrapper] Kernel arguments are not aligned to 64-bits\n")
 	}
 
 	fmt.Printf("[ocl-wrapper] Arguments passed to kernel [%s]", hex.Dump(all_args))
@@ -271,7 +296,7 @@ func gcn3EnqueueWriteBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 
 	sim_driver.MemoryCopyHostToDevice(*sim_buffer, ptr_bytes)
 
-	//fmt.Printf("[ocl-wrapper] Wrote data to device: [%s] @ region: %02x\n", hex.Dump(ptr_bytes), *sim_buffer)
+//	fmt.Printf("[ocl-wrapper] Wrote data to device: [%s] @ region: %02x\n", hex.Dump(back), *sim_buffer)
 
 	fmt.Printf("[ocl-wrapper] Enqueued Write Buffer for buffer ID %v\n", buffer)
 	return 0 // CL_SUCCESS
@@ -281,11 +306,20 @@ func gcn3EnqueueWriteBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 func gcn3EnqueueReadBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 	sim_buffer := buffer_map[buffer]
 
-	ptr_bytes := C.GoBytes(ptr, C.int(size))
-
-	//fmt.Printf("[ocl-wrapper] Fetched data from device: [%s] @ region %02x\n", hex.Dump(ptr_bytes), *sim_buffer)
+	ptr_bytes := make([]byte, size)
+	for i := 0; i < size; i++ {
+		ptr_bytes[i] = 0xFF
+	}
 
 	sim_driver.MemoryCopyDeviceToHost(ptr_bytes, *sim_buffer)
+
+//	fmt.Printf("[ocl-wrapper] Fetched data from device: [%s] @ region %02x\n", hex.Dump(ptr_bytes), *sim_buffer)
+
+	var cptr = uintptr(ptr)
+	for i := 0; i < size; i++ {
+		*(*C.uchar)(unsafe.Pointer(cptr)) = C.uchar(ptr_bytes[i])
+		cptr++
+	}
 
 	fmt.Printf("[ocl-wrapper] Enqueued Read Buffer for buffer ID %v\n", buffer)
 
@@ -299,10 +333,26 @@ func gcn3SetKernelArg(kernel int, arg_idx int, size int, ptr unsafe.Pointer) int
 	cl_kernel_arg := CLKernelArg{}
 	cl_kernel_arg.idx = arg_idx
 	cl_kernel_arg.size = size
-	//cl_kernel_arg.bytes = *((*[size]byte) (ptr))
-	//cl_kernel_arg.bytes = C.GoBytes(ptr, C.int(size))
-	cl_kernel_arg.ptr_val = *(*uint64)(ptr) //uint64(uintptr(ptr))
 
+	if ptr == nil {
+		fmt.Printf("[ocl-wrapper] Arg %i is a LOCAL\n", arg_idx)
+		cl_kernel_arg.ptr_val = 0
+		cl_kernel_arg.arg_type = 1 // Local
+	} else {
+		ptr_value := uint64(*(*uint32)(ptr))
+		fmt.Printf("[ocl-wrapper] Input PTR is: %i\n", ptr_value)
+		if val, ok := buffer_map[(int)(ptr_value)]; ok {
+			fmt.Printf("[ocl-wrapper] Arg %i is a GLOBAL\n", arg_idx)
+			cl_kernel_arg.ptr_val = (uint64)(*val)
+			cl_kernel_arg.arg_type = 0 // Global
+		} else {
+			fmt.Printf("[ocl-wrapper] Arg %i is a PRIMATIVE\n", arg_idx)
+			cl_kernel_arg.ptr_val = ptr_value
+			cl_kernel_arg.arg_type = 2 // Primative
+		}
+	}
+
+/*
 	test := unsafe.Sizeof(reflect.TypeOf((int)(0)))
 
 	if uintptr(size) > test {
@@ -310,6 +360,7 @@ func gcn3SetKernelArg(kernel int, arg_idx int, size int, ptr unsafe.Pointer) int
 	} else {
 		cl_kernel_arg.arg_type = uint8(0)
 	}
+*/
 
 	arg_list.PushBack(cl_kernel_arg)
 
