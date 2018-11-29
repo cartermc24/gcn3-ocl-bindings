@@ -5,7 +5,8 @@ set(CMAKE_C_STANDARD 99)
 
 #find_package( OpenCL REQUIRED )
 #include_directories( ${OpenCL_INCLUDE_DIR} )
+find_package( Threads REQUIRED )
 include_directories( ../libsim-go/)
 
 add_library(sim_ocl SHARED libsim-ocl.c libsim-ocl.h)
-target_link_libraries(sim_ocl ${CMAKE_CURRENT_SOURCE_DIR}/../libsim-go/ocl.a)
+target_link_libraries(sim_ocl Threads::Threads ${CMAKE_CURRENT_SOURCE_DIR}/../libsim-go/ocl.a)

@@ -33,6 +33,15 @@ cl_int clGetDeviceInfo(cl_device_id device,
     return CL_SUCCESS;
 }
 
+cl_int clGetContextInfo(cl_context context,
+  			cl_context_info param_name,
+  			size_t param_value_size,
+  			void *param_value,
+  			size_t *param_value_size_ret) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
+
 cl_context clCreateContext(const cl_context_properties *properties,
                 cl_uint num_devices,
                 const cl_device_id *devices,
@@ -111,6 +120,15 @@ cl_int clGetProgramBuildInfo(cl_program program,
                              void *param_value,
                              size_t *param_value_size_ret) {
     initialize_simulator(); 
+    return CL_SUCCESS;
+}
+
+cl_int clGetPlatformInfo(cl_platform_id platform,
+  			 cl_platform_info param_name,
+  			 size_t param_value_size,
+  			 void *param_value,
+  			 size_t *param_value_size_ret) {
+    initialize_simulator();
     return CL_SUCCESS;
 }
 
@@ -218,6 +236,29 @@ cl_int clEnqueueReadBuffer(cl_command_queue command_queue,
     return (cl_int)gcn3EnqueueReadBuffer((GoInt)buffer, (GoInt)size, ptr);
 }
 
+cl_int clEnqueueCopyBuffer(cl_command_queue command_queue,
+  			   cl_mem src_buffer,
+  			   cl_mem dst_buffer,
+  			   size_t src_offset,
+  			   size_t dst_offset,
+  			   size_t cb,
+  			   cl_uint num_events_in_wait_list,
+  			   const cl_event *event_wait_list,
+  			   cl_event *event) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
+
+cl_int clFinish(cl_command_queue command_queue) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
+
+cl_int clRetainContext(cl_context context) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
+
 cl_int clReleaseMemObject(cl_mem memobj) {
     initialize_simulator(); 
     return CL_SUCCESS;
@@ -289,10 +330,15 @@ cl_int clRetainMemObject(cl_mem memobj) {
     return CL_SUCCESS;
 }
 
+cl_int clReleaseProgram(cl_program program) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
 
-
-
-
+cl_int clReleaseKernel(cl_kernel kernel) {
+    initialize_simulator();
+    return CL_SUCCESS;
+}
 
 
 
