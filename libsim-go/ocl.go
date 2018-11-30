@@ -39,9 +39,18 @@ var device_id int = 0
 //
 // Data Model
 //
+/*
+   build_status:
+   	0: Not built yet
+	1: Build failure
+	2: Built successfully, program binary saved
+	3: Released
+*/
 type CLProgram struct {
 	program_string string
 	program        []byte
+	build_status   int
+	build_status_msg string
 }
 
 type CLKernel struct {
@@ -167,7 +176,87 @@ func gcn3GetPlatformIDs() int {
 
 //export gcn3GetDeviceIDs
 func gcn3GetDeviceIDs() int {
-	return device_id
+	//This function will return the number of simulated GPUs avaliable
+	//the GPU ids will be the index from 1..(num gpus)
+	return 1
+}
+
+//export gcn3GetProgramBuildInfo
+func gcn3GetProgramBuildInfo(program int, device_id int, param_name int, param_value_size uint64, param_ptr unsafe.Pointer, param_ptr_size unsafe.Pointer) int {
+	var ptr_size uint64 = 100
+	if param_ptr_size != nil {
+		ptr_size = *(*uint64)(param_ptr_size)
+	}
+
+	switch param_name {
+		case 0x1181: // CL_PROGRAM_BUILD_STATUS
+			fmt.Printf("Program [%i] has build status [%i]\n", program, program_map[program].build_status)
+			if program_map[program].build_status == 0 {
+				*(*int)(param_ptr) = -1 //CL_BUILD_NONE
+			} else if program_map[program].build_status == 1 {
+				*(*int)(param_ptr) = -2 //CL_BUILD_ERROR
+			} else if program_map[program].build_status == 2 {
+				*(*int)(param_ptr) = 0 //CL_BUILD_SUCCESS
+			} else { // If we are in a weird state (like released) return CL_BUILD_NONE
+				*(*int)(param_ptr) = -1
+			}
+		case 0x1183: // CL_PROGRAM_BUILD_LOG
+			if program_map[program].build_status == 1 {
+				writeStringToPtr(param_ptr, ptr_size, program_map[program].build_status_msg)
+			} else {
+				writeStringToPtr(param_ptr, ptr_size, "No error log")
+			}
+	}
+
+	return 0 // CL_SUCCESS
+}
+
+//export gcn3GetDeviceInfo
+func gcn3GetDeviceInfo(device_id int, param_name int, param_value_size uint64, param_ptr unsafe.Pointer, param_ptr_size unsafe.Pointer) int {
+	var ptr_size uint64 = 100
+	if param_ptr_size != nil {
+		ptr_size = *(*uint64)(param_ptr_size)
+	}
+
+	switch param_name {
+		case 0x102B: // CL_DEVICE_NAME
+			writeStringToPtr(param_ptr, ptr_size, "GCN3 Simulated GPU")
+		case 0x102C: // CL_DEVICE_VENDOR
+			writeStringToPtr(param_ptr, ptr_size, "NUCAR")
+		case 0x1000: // CL_DEVICE_TYPE
+			*(*uint)(param_ptr) = 4 // CL_DEVICE_TYPE_GPU
+		case 0x1002: // CL_DEVICE_MAX_COMPUTE_UNITS
+			*(*uint)(param_ptr) = 20
+		case 0x1004: // CL_DEVICE_MAX_WORK_GROUP_SIZE
+			*(*uint)(param_ptr) = 1024
+		case 0x1023: // CL_DEVICE_LOCAL_MEM_SIZE
+			*(*uint)(param_ptr) = 49152
+		case 0x1022: // CL_DEVICE_LOCAL_MEM_TYPE
+			*(*uint)(param_ptr) = 1
+		case 0x101F: // CL_DEVICE_GLOBAL_MEM_SIZE
+			*(*uint)(param_ptr) = 8510701568
+		case 0x1027: // CL_DEVICE_AVALIABLE
+			*(*uint)(param_ptr) = 1
+		case 0x1053: // CL_DEVICE_SVM_CAPABILITIES
+			*(*uint)(param_ptr) = 0 // Disable SVM
+	}
+
+	return 0 // CL_SUCCESS
+}
+
+func writeStringToPtr(ptr unsafe.Pointer, ptr_len uint64, str string) {
+	var strptr = uintptr(ptr)
+	var str_len uint64
+	if uint64(len(str)) > ptr_len {
+		str_len = ptr_len
+	} else {
+		str_len = uint64(len(str))
+	}
+
+	for i := uint64(0); i < str_len; i++ {
+                *(*C.uchar)(unsafe.Pointer(strptr)) = C.uchar(str[i])
+                strptr++
+        }
 }
 
 //export gcn3CreateContext
@@ -187,6 +276,7 @@ func gcn3CreateProgramWithSource(context int, program_string string) int {
 
 	cl_program := CLProgram{}
 	cl_program.program_string = program_string
+	cl_program.build_status = 0
 
 	program_map[program_idx] = &cl_program
 
@@ -199,6 +289,9 @@ func gcn3CreateProgramWithSource(context int, program_string string) int {
 
 //export gcn3BuildProgram
 func gcn3BuildProgram(program_id int) int {
+	// Set build status to failure, we will reset if successful
+	program_map[program_id].build_status = 1
+
 	// Write program source to file
 	fmt.Printf("[ocl-wrapper] Writing CL source to temporary file\n")
 	program_bytes := []byte(program_map[program_id].program_string)
@@ -213,6 +306,7 @@ func gcn3BuildProgram(program_id int) int {
 	usr, usr_err := user.Current()
 	if usr_err != nil {
 		fmt.Fprintf(os.Stderr, "[ocl-wrapper] Error: unable to get user information to locate compiler\n")
+		program_map[program_id].build_status_msg = "[ocl-wrapper] Error: unable to get user information to locate compiler"
 		return -11 // CL_BUILD_PROGRAM_FAILURE
 	}
 	compiler_root := usr.HomeDir + "/.clangocl/clang-ocl"
@@ -227,10 +321,12 @@ func gcn3BuildProgram(program_id int) int {
 		fmt.Fprintf(os.Stderr, "[ocl-wrapper] Error: clang-ocl reported compiler errors:\n")
 		fmt.Fprintf(os.Stderr, stderr.String())
 		fmt.Fprintf(os.Stderr, "\n")
+		program_map[program_id].build_status_msg = stderr.String()
 		return -11 // CL_BUILD_PROGRAM_FAILURE
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[ocl-wrapper] Error: could not invoke compiler, ensure clang-ocl exists at ~/.clangocl/clang-ocl, error: %s\n", err)
+		program_map[program_id].build_status_msg = "[ocl-wrapper] Error: could not invoke compiler, ensure clang-ocl exists at ~/.clangocl/clang-ocl"
 		return -11 // CL_BUILD_PROGRAM_FAILURE
 	}
 
@@ -238,13 +334,15 @@ func gcn3BuildProgram(program_id int) int {
 	hsacoBytes, err := ioutil.ReadFile("/tmp/prog.hsaco")
 	if err != nil {
 		fmt.Printf("[ocl-wrapper] Error building program: %v\n", err)
+		program_map[program_id].build_status_msg = "[ocl-wrapper] Error building program, no output from compiler"
 		return -11 // CL_BUILD_PROGRAM_FAILURE
 	}
 
 	program_map[program_id].program = hsacoBytes
+	program_map[program_id].build_status = 2 // Build success
 
 	fmt.Printf("[ocl-wrapper] Built program with ID %v\n", program_id)
-	return 1 // CL_SUCCESS
+	return 0 // CL_SUCCESS
 }
 
 //export gcn3CreateKernel
@@ -421,7 +519,15 @@ func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_si
 
 	sim_driver.LaunchKernelRuntimeArgs(sim_kernel, grid_args, work_args, all_args)
 
-	return 1 // CL_SUCCESS
+	return 0 // CL_SUCCESS
+}
+
+//export gcn3ReleaseProgram
+func gcn3ReleaseProgram(program_id int) int {
+	program_map[program_id].program = nil
+	program_map[program_id].program_string = ""
+	program_map[program_id].build_status = 3
+	return 0 // CL_SUCCESS
 }
 
 func main() {} // Required but ignored

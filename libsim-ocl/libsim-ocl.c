@@ -11,7 +11,11 @@ void initialize_simulator() {
 }
 
 cl_int clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms) {
-    initialize_simulator(); 
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clGetPlatformIDs called with [%u, %p, %u]\n", num_entries, platforms, *num_platforms);
+#endif
+
     return (cl_int)gcn3GetPlatformIDs();
 }
 
@@ -21,7 +25,28 @@ cl_int clGetDeviceIDs(cl_platform_id platform,
                       cl_device_id *devices,
                       cl_uint *num_devices) {
     initialize_simulator(); 
-    return (cl_int)gcn3GetDeviceIDs();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clGetDeviceIDs called with device type %i\n", device_type);
+#endif
+
+    if (device_type != CL_DEVICE_TYPE_ALL || device_type != CL_DEVICE_TYPE_GPU || device_type != CL_DEVICE_TYPE_DEFAULT) {
+	fprintf(stderr, "[ocl-wrapper]: Warning: Attempted to query non-GPU devices...\n");
+    }
+
+    if (devices == NULL) {
+	fprintf(stderr, "[ocl-wrapper]: Warning: devices is null, no devices can be returned\n");
+	return CL_SUCCESS;
+    }
+
+    int32_t num_sim_devices = gcn3GetDeviceIDs();
+    if (num_devices != NULL) { *num_devices = num_sim_devices; }
+
+    int32_t max_entries = num_sim_devices > num_entries ? num_entries : num_sim_devices;
+    for (int32_t i = 0; i < max_entries; i++) {
+	devices[0] = i+1;
+    }
+
+    return CL_SUCCESS;
 }
 
 cl_int clGetDeviceInfo(cl_device_id device,
@@ -29,8 +54,12 @@ cl_int clGetDeviceInfo(cl_device_id device,
                        size_t param_value_size,
                        void *param_value,
                        size_t *param_value_size_ret) {
-    initialize_simulator(); 
-    return CL_SUCCESS;
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clGetDeviceInfo called\n");
+#endif
+
+    return (cl_int)gcn3GetDeviceInfo(device, param_name, param_value_size, param_value, param_value_size_ret);
 }
 
 cl_int clGetContextInfo(cl_context context,
@@ -39,6 +68,10 @@ cl_int clGetContextInfo(cl_context context,
   			void *param_value,
   			size_t *param_value_size_ret) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clGetContextInfo called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
@@ -48,8 +81,13 @@ cl_context clCreateContext(const cl_context_properties *properties,
                 void (CL_CALLBACK *pfn_notify)(const char *, const void *, size_t, void *),
                 void *user_data,
                 cl_int *errcode_ret) {
+    
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clCreateContext called\n");
+#endif
+
     if (errcode_ret != NULL) { *errcode_ret = CL_SUCCESS; }
-    initialize_simulator(); 
     return (cl_context)gcn3CreateContext();
 }
 
@@ -57,7 +95,11 @@ cl_command_queue clCreateCommandQueue(cl_context context,
                                       cl_device_id device,
                                       cl_command_queue_properties properties,
                                       cl_int *errcode_ret) {
-    initialize_simulator(); 
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clCreateCommandQueue called\n");
+#endif
+
     if (errcode_ret != NULL) { *errcode_ret = CL_SUCCESS; }
     cl_command_queue queue;
     return queue;
@@ -69,6 +111,10 @@ cl_command_queue clCreateCommandQueueWithProperties(cl_context context,
                                                     const cl_queue_properties *properties,
                                                     cl_int *errcode_ret) {
     initialize_simulator(); 
+#ifdef TRACE
+    printf("[OCL-TRACE]: clCreateCommandQueueWithProperties called\n");
+#endif
+
     cl_command_queue queue;
     return queue;
 }
@@ -80,6 +126,10 @@ cl_program clCreateProgramWithSource(cl_context context,
                                      const size_t *lengths,
                                      cl_int *errcode_ret) {
     initialize_simulator(); 
+#ifdef TRACE
+    printf("[OCL-TRACE]: clCreateProgramWithSource called\n");
+#endif
+
     GoString string;
     string.p = strings[0];
 
@@ -108,7 +158,11 @@ cl_int clBuildProgram(cl_program program,
                       const char *options,
                       void (*pfn_notify)(cl_program, void *user_data),
                       void *user_data) {
-    initialize_simulator(); 
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clBuildProgram called\n");
+#endif
+
 
     return (cl_int)gcn3BuildProgram((GoInt)program);
 }
@@ -119,8 +173,12 @@ cl_int clGetProgramBuildInfo(cl_program program,
                              size_t param_value_size,
                              void *param_value,
                              size_t *param_value_size_ret) {
-    initialize_simulator(); 
-    return CL_SUCCESS;
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clGetProgramBuildInfo called for program %u asking for param: %u\n", program, param_name);
+#endif
+
+    return (cl_int)gcn3GetProgramBuildInfo(program, device, param_name, param_value_size, param_value, param_value_size_ret);
 }
 
 cl_int clGetPlatformInfo(cl_platform_id platform,
@@ -129,6 +187,10 @@ cl_int clGetPlatformInfo(cl_platform_id platform,
   			 void *param_value,
   			 size_t *param_value_size_ret) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clGetPlatformInfo called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
@@ -138,6 +200,9 @@ cl_mem clCreateBuffer(cl_context context,
                       void *host_ptr,
                       cl_int *errcode_ret) {
     initialize_simulator(); 
+#ifdef TRACE
+    printf("[OCL-TRACE]: clCreateBuffer called\n");
+#endif
 
     int buffer_desc = (int)gcn3CreateBuffer((GoInt)context, (GoInt)size);
     if (buffer_desc < 0) {
@@ -153,6 +218,9 @@ cl_kernel clCreateKernel(cl_program program,
                          const char *kernel_name,
                          cl_int *errcode_ret) {
     initialize_simulator(); 
+#ifdef TRACE
+    printf("[OCL-TRACE]: clCreateKernel called\n");
+#endif
 
     GoString string;
     string.p = kernel_name;
@@ -174,6 +242,10 @@ cl_int clSetKernelArg(cl_kernel kernel,
                       size_t arg_size,
                       const void *arg_value) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clSetKernelArg called\n");
+#endif
+
     return (cl_int)gcn3SetKernelArg((GoInt)kernel, (GoInt)arg_index, (GoInt)arg_size, arg_value);
 }
 
@@ -186,7 +258,10 @@ cl_int clEnqueueNDRangeKernel(cl_command_queue command_queue,
                               cl_uint num_events_in_wait_list,
                               const cl_event *event_wait_list,
                               cl_event *event) {
-    initialize_simulator(); 
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clEnqueueNDRangeKernel called\n");
+#endif
 
     uint32_t l_global_work_size[3];
     uint16_t l_local_work_size[3];
@@ -206,7 +281,11 @@ cl_int clEnqueueNDRangeKernel(cl_command_queue command_queue,
 
 cl_int clWaitForEvents(cl_uint num_events,
                        const cl_event *event_list) {
-    initialize_simulator(); 
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clWaitForEvents called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
@@ -220,6 +299,10 @@ cl_int clEnqueueWriteBuffer(cl_command_queue command_queue,
                             const cl_event *event_wait_list,
                             cl_event *event) {
     initialize_simulator(); 
+#ifdef TRACE
+    printf("[OCL-TRACE]: clEnqueueWriteBuffer called\n");
+#endif
+
     return (cl_int)gcn3EnqueueWriteBuffer((GoInt)buffer, (GoInt)size, ptr);
 }
 
@@ -232,7 +315,11 @@ cl_int clEnqueueReadBuffer(cl_command_queue command_queue,
                            cl_uint num_events_in_wait_list,
                            const cl_event *event_wait_list,
                            cl_event *event) {
-    initialize_simulator(); 
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clEnqueueReadBuffer called\n");
+#endif
+
     return (cl_int)gcn3EnqueueReadBuffer((GoInt)buffer, (GoInt)size, ptr);
 }
 
@@ -246,31 +333,55 @@ cl_int clEnqueueCopyBuffer(cl_command_queue command_queue,
   			   const cl_event *event_wait_list,
   			   cl_event *event) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clEnqueueCopyBuffer called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
 cl_int clFinish(cl_command_queue command_queue) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clFinish called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
 cl_int clRetainContext(cl_context context) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clRetainContext called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
 cl_int clReleaseMemObject(cl_mem memobj) {
-    initialize_simulator(); 
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clReleaseMemObject called\n");
+#endif
+ 
     return CL_SUCCESS;
 }
 
 cl_int clReleaseContext(cl_context context) {
-    initialize_simulator(); 
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clReleaseContext called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
 cl_int clReleaseCommandQueue(cl_command_queue command_queue) {
-    initialize_simulator(); 
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clReleaseCommandQueue called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
@@ -282,6 +393,10 @@ cl_program clCreateProgramWithBinary(cl_context context,
 				     cl_int *binary_status,
 				     cl_int *errcode_ret) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clCreateProgramWithBinary called\n");
+#endif
+
     return 0;
 }
 
@@ -291,6 +406,10 @@ cl_int clGetProgramInfo(cl_program program,
 			void *param_value,
 			size_t *param_value_size_ret) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clGetProgramInfo called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
@@ -299,6 +418,10 @@ cl_int clCreateKernelsInProgram(cl_program program,
 				cl_kernel *kernels,
 				cl_uint *num_kernels_ret) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clCreateKernelsInProgram called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
@@ -308,6 +431,10 @@ cl_int clGetKernelInfo(cl_kernel kernel,
   	               void *param_value,
   		       size_t *param_value_size_ret) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clGetKernelInfo called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
@@ -317,26 +444,46 @@ cl_int clEnqueueTask(cl_command_queue command_queue,
   		     const cl_event *event_wait_list,
   		     cl_event *event) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clEnqueueTask called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
 cl_int clRetainCommandQueue(cl_command_queue command_queue) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clRetainCommandQueue called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
 cl_int clRetainMemObject(cl_mem memobj) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clRetainMemObject called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
 cl_int clReleaseProgram(cl_program program) {
     initialize_simulator();
-    return CL_SUCCESS;
+#ifdef TRACE
+    printf("[OCL-TRACE]: clReleaseProgram called\n");
+#endif
+
+    return (cl_int)gcn3ReleaseProgram(program);
 }
 
 cl_int clReleaseKernel(cl_kernel kernel) {
     initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clReleaseKernel called\n");
+#endif
+
     return CL_SUCCESS;
 }
 
