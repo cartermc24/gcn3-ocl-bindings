@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"bytes"
 	"encoding/hex"
+	"debug/elf"
 
 	"gitlab.com/akita/gcn3/driver"
 	"gitlab.com/akita/gcn3/insts"
@@ -56,6 +57,7 @@ type CLProgram struct {
 type CLKernel struct {
 	arg_list *list.List
 	kernel   *insts.HsaCo
+	kernel_name string
 }
 
 /*
@@ -181,6 +183,24 @@ func gcn3GetDeviceIDs() int {
 	return 1
 }
 
+//export gcn3GetKernelInfo
+func gcn3GetKernelInfo(kernel int, param_name int, param_value_size uint64, param_ptr unsafe.Pointer, param_ptr_size unsafe.Pointer) int {
+	var ptr_size uint64 = 100
+	if param_ptr_size != nil {
+		ptr_size = *(*uint64)(param_ptr_size)
+	}
+
+	fmt.Printf("!!! KERNELID: %i !!!\n", kernel)
+
+	switch param_name {
+		case 0x1190: // CL_KERNEL_FUNCTION_NAME 
+			fmt.Printf("!!! QUERIED NAME IS: %s !!!\n", kernel_map[kernel].kernel_name)
+			writeStringToPtr(param_ptr, ptr_size, kernel_map[kernel].kernel_name)
+	}
+
+	return 0 // CL_SUCCESS
+}
+
 //export gcn3GetProgramBuildInfo
 func gcn3GetProgramBuildInfo(program int, device_id int, param_name int, param_value_size uint64, param_ptr unsafe.Pointer, param_ptr_size unsafe.Pointer) int {
 	var ptr_size uint64 = 100
@@ -210,6 +230,7 @@ func gcn3GetProgramBuildInfo(program int, device_id int, param_name int, param_v
 
 	return 0 // CL_SUCCESS
 }
+
 
 //export gcn3GetDeviceInfo
 func gcn3GetDeviceInfo(device_id int, param_name int, param_value_size uint64, param_ptr unsafe.Pointer, param_ptr_size unsafe.Pointer) int {
@@ -257,6 +278,8 @@ func writeStringToPtr(ptr unsafe.Pointer, ptr_len uint64, str string) {
                 *(*C.uchar)(unsafe.Pointer(strptr)) = C.uchar(str[i])
                 strptr++
         }
+
+	*(*C.uchar)(unsafe.Pointer(strptr)) = C.uchar(0)
 }
 
 //export gcn3CreateContext
@@ -345,6 +368,40 @@ func gcn3BuildProgram(program_id int) int {
 	return 0 // CL_SUCCESS
 }
 
+//export gcn3CreateKernelsInProgram
+func gcn3CreateKernelsInProgram(program_id int, num_kernels uint, kernels unsafe.Pointer, num_kernels_ret unsafe.Pointer, cl_kernel_size int) int {
+	reader := bytes.NewReader(program_map[program_id].program)
+	executable, err := elf.NewFile(reader)
+	if err != nil {
+		fmt.Printf("[ocl-wrapper]: Error %s\n", err)
+		return -47 // CL_INVALID_KERNEL_DEFINITION
+	}
+
+	symbols, err := executable.DynamicSymbols()
+	if err != nil {
+		fmt.Printf("[ocl-wrapper]: Error %s\n", err)
+		return -47 // CL_INVALID_KERNEL_DEFINITION
+	}
+
+	var kernelptr = uintptr(kernels)
+	var i = uint(0)
+	for _, symbol := range symbols {
+		*(*C.int)(unsafe.Pointer(kernelptr)) = C.int(gcn3CreateKernel(program_id, symbol.Name))
+		fmt.Printf("[ocl-wrapper]: Created kernel with name: [%s]\n", symbol.Name)
+		kernelptr += uintptr(cl_kernel_size)
+		if i >= num_kernels {
+			break
+		}
+		i++
+	}
+
+	if num_kernels_ret != nil {
+		*(*uint64)(num_kernels_ret) = uint64(i)
+	}
+
+	return 0 // CL_SUCCESS
+}
+
 //export gcn3CreateKernel
 func gcn3CreateKernel(program_id int, kernel_name string) int {
 
@@ -361,6 +418,7 @@ func gcn3CreateKernel(program_id int, kernel_name string) int {
 
 	cl_kernel.kernel = kernel
 	cl_kernel.arg_list = list.New()
+	cl_kernel.kernel_name = kernel_name
 	kernel_map[kernel_idx] = &cl_kernel
 
 	kernel_idx += 1

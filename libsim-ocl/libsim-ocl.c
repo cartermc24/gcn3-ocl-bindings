@@ -421,8 +421,10 @@ cl_int clCreateKernelsInProgram(cl_program program,
 #ifdef TRACE
     printf("[OCL-TRACE]: clCreateKernelsInProgram called\n");
 #endif
+    
+    memset(kernels, 0, num_kernels*sizeof(cl_kernel));
 
-    return CL_SUCCESS;
+    return (cl_int)gcn3CreateKernelsInProgram(program, num_kernels, kernels, num_kernels_ret, sizeof(cl_kernel));
 }
 
 cl_int clGetKernelInfo(cl_kernel kernel,
@@ -432,10 +434,10 @@ cl_int clGetKernelInfo(cl_kernel kernel,
   		       size_t *param_value_size_ret) {
     initialize_simulator();
 #ifdef TRACE
-    printf("[OCL-TRACE]: clGetKernelInfo called\n");
+    printf("[OCL-TRACE]: clGetKernelInfo called with param: %u\n", param_name);
 #endif
 
-    return CL_SUCCESS;
+    return (cl_int)gcn3GetKernelInfo(kernel, param_name, param_value_size, param_value, param_value_size_ret);
 }
 
 cl_int clEnqueueTask(cl_command_queue command_queue,
