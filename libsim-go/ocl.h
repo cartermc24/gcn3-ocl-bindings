@@ -83,6 +83,12 @@ extern GoInt gcn3GetPlatformIDs();
 
 extern GoInt gcn3GetDeviceIDs();
 
+extern GoInt gcn3GetKernelInfo(GoInt p0, GoInt p1, GoUint64 p2, void* p3, void* p4);
+
+extern GoInt gcn3GetProgramBuildInfo(GoInt p0, GoInt p1, GoInt p2, GoUint64 p3, void* p4, void* p5);
+
+extern GoInt gcn3GetDeviceInfo(GoInt p0, GoInt p1, GoUint64 p2, void* p3, void* p4);
+
 extern GoInt gcn3CreateContext();
 
 // Returns Kernel ID
@@ -90,6 +96,8 @@ extern GoInt gcn3CreateContext();
 extern GoInt gcn3CreateProgramWithSource(GoInt p0, GoString p1);
 
 extern GoInt gcn3BuildProgram(GoInt p0);
+
+extern GoInt gcn3CreateKernelsInProgram(GoInt p0, GoUint p1, void* p2, void* p3, GoInt p4);
 
 extern GoInt gcn3CreateKernel(GoInt p0, GoString p1);
 
@@ -108,6 +116,8 @@ extern GoInt gcn3SetKernelArg(GoInt p0, GoInt p1, GoInt p2, void* p3);
 // local_work_size is type uint16
 
 extern GoInt gcn3LaunchKernel(GoInt p0, void* p1, void* p2);
+
+extern GoInt gcn3ReleaseProgram(GoInt p0);
 
 #ifdef __cplusplus
 }
