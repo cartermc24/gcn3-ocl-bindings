@@ -56,7 +56,7 @@ cl_int clGetDeviceInfo(cl_device_id device,
                        size_t *param_value_size_ret) {
     initialize_simulator();
 #ifdef TRACE
-    printf("[OCL-TRACE]: clGetDeviceInfo called\n");
+    printf("[OCL-TRACE]: clGetDeviceInfo called asking for %04x\n", param_name);
 #endif
 
     return (cl_int)gcn3GetDeviceInfo(device, param_name, param_value_size, param_value, param_value_size_ret);
