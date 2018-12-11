@@ -16,7 +16,18 @@ cl_int clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint 
     printf("[OCL-TRACE]: clGetPlatformIDs called with [%u, %p, %u]\n", num_entries, platforms, *num_platforms);
 #endif
 
-    return (cl_int)gcn3GetPlatformIDs();
+    if (num_platforms != NULL) {
+	    *num_platforms = 1;
+    }
+
+    if (num_entries > 0) {
+    	platforms[0] = 1;
+    } else if (num_entries == 0 && platforms == NULL && num_platforms == NULL) {
+        fprintf(stderr, "[ocl-wrapper] Error: clGetPlatformIDs called with 0 entries and null platforms\n");
+	return CL_INVALID_VALUE;
+    } 
+
+    return CL_SUCCESS;
 }
 
 cl_int clGetDeviceIDs(cl_platform_id platform,
@@ -43,7 +54,7 @@ cl_int clGetDeviceIDs(cl_platform_id platform,
 
     int32_t max_entries = num_sim_devices > num_entries ? num_entries : num_sim_devices;
     for (int32_t i = 0; i < max_entries; i++) {
-	devices[0] = i+1;
+	devices[i] = i+1;
     }
 
     return CL_SUCCESS;
@@ -57,6 +68,7 @@ cl_int clGetDeviceInfo(cl_device_id device,
     initialize_simulator();
 #ifdef TRACE
     printf("[OCL-TRACE]: clGetDeviceInfo called asking for %04x\n", param_name);
+    printf("\tParamvalsize: %lu, %p\n", param_value_size, param_value);
 #endif
 
     return (cl_int)gcn3GetDeviceInfo(device, param_name, param_value_size, param_value, param_value_size_ret);
@@ -453,6 +465,64 @@ cl_int clEnqueueTask(cl_command_queue command_queue,
     return CL_SUCCESS;
 }
 
+cl_int clGetKernelWorkGroupInfo(cl_kernel kernel,
+  				cl_device_id device,
+  				cl_kernel_work_group_info param_name,
+  				size_t param_value_size,
+  				void *param_value,
+  				size_t *param_value_size_ret) {
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clGetKernelWorkGroupInfo called\n");
+#endif
+
+    return CL_SUCCESS;
+}
+
+void * clEnqueueMapBuffer(cl_command_queue command_queue,
+  			  cl_mem buffer,
+  			  cl_bool blocking_map,
+  			  cl_map_flags map_flags,
+  			  size_t offset,
+  			  size_t cb,
+  			  cl_uint num_events_in_wait_list,
+  			  const cl_event *event_wait_list,
+  			  cl_event *event,
+  			  cl_int *errcode_ret) {
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clEnqueueMapBuffer called\n");
+#endif
+
+    return NULL;
+}
+
+cl_int clEnqueueUnmapMemObject(cl_command_queue command_queue,
+  			       cl_mem memobj,
+  			       void *mapped_ptr,
+  		     	       cl_uint num_events_in_wait_list,
+  			       const cl_event *event_wait_list,
+  			       cl_event *event) {
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clEnqueueUnmapMemObject called\n");
+#endif
+
+    return CL_SUCCESS;
+}
+
+cl_int clGetEventProfilingInfo(cl_event event,
+  			       cl_profiling_info param_name,
+  			       size_t param_value_size,
+  			       void *param_value,
+			       size_t *param_value_size_ret) {
+#ifdef TRACE
+    printf("[OCL-TRACE]: clGetEventProfilingInfo called\n");
+#endif
+
+    return CL_SUCCESS;
+}
+
 cl_int clRetainCommandQueue(cl_command_queue command_queue) {
     initialize_simulator();
 #ifdef TRACE
@@ -489,8 +559,30 @@ cl_int clReleaseKernel(cl_kernel kernel) {
     return CL_SUCCESS;
 }
 
+cl_int clReleaseEvent(cl_event event) {
+    initialize_simulator();
+#ifdef TRACE
+    printf("[OCL-TRACE]: clReleaseEvent called\n");
+#endif
 
+    return CL_SUCCESS;
+}
 
+cl_int clRetainProgram(cl_program program) {
+#ifdef TRACE
+    printf("[OCL-TRACE]: clRetainProgram called\n");
+#endif
+
+    return CL_SUCCESS;
+}
+
+cl_int clRetainKernel(cl_kernel kernel) {
+#ifdef TRACE
+    printf("[OCL-TRACE]: clRetainKernel called\n");
+#endif
+
+    return CL_SUCCESS;
+}
 
 
 

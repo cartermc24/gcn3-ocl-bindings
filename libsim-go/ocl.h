@@ -17,7 +17,7 @@ typedef struct { const char *p; ptrdiff_t n; } _GoString_;
 /* Start of preamble from import "C" comments.  */
 
 
-#line 3 "/home/carter/simulator/gcn3-ocl-bindings/libsim-go/ocl.go"
+#line 3 "/home/carter/simulator/caffe_integration/gcn3-ocl-bindings/libsim-go/ocl.go"
 
  
 #line 1 "cgo-generated-wrapper"

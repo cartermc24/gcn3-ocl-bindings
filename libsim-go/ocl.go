@@ -34,7 +34,7 @@ var kernel_idx int = 0
 // Hardcoded value
 var context_id int = 8
 var command_queue_id int = 12
-var platform_id int = 0
+var platform_id int = 1
 var device_id int = 0
 
 //
@@ -236,7 +236,7 @@ func gcn3GetProgramBuildInfo(program int, device_id int, param_name int, param_v
 
 //export gcn3GetDeviceInfo
 func gcn3GetDeviceInfo(device_id int, param_name int, param_value_size uint64, param_ptr unsafe.Pointer, param_ptr_size unsafe.Pointer) int {
-	var ptr_size uint64 = 1000
+	var ptr_size uint64 = 210
 	if param_ptr_size != nil {
 		ptr_size = *(*uint64)(param_ptr_size)
 	}
@@ -282,6 +282,10 @@ func gcn3GetDeviceInfo(device_id int, param_name int, param_value_size uint64, p
 }
 
 func writeStringToPtr(ptr unsafe.Pointer, ptr_len uint64, str string) {
+	if ptr == nil {
+		return
+	}
+
 	var strptr = uintptr(ptr)
 	var str_len uint64
 	if uint64(len(str)) > ptr_len {
@@ -348,7 +352,7 @@ func gcn3BuildProgram(program_id int) int {
 		program_map[program_id].build_status_msg = "[ocl-wrapper] Error: unable to get user information to locate compiler"
 		return -11 // CL_BUILD_PROGRAM_FAILURE
 	}
-	compiler_root := usr.HomeDir + "/.clangocl/clang-ocl"
+	compiler_root := usr.HomeDir + "/.simocl/clang-ocl"
 
 	compiler := exec.Command(compiler_root, "-mcpu=gfx803", "-o", "/tmp/prog.hsaco", "/tmp/prog.cl")
 
