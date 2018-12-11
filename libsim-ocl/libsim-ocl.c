@@ -284,8 +284,8 @@ cl_int clEnqueueNDRangeKernel(cl_command_queue command_queue,
     }
 
     for (int i = 0; i < work_dim; i++) {
-        l_global_work_size[i] = (uint32_t)global_work_size[i];
-        l_local_work_size[i] = (uint16_t)local_work_size[i];
+	if (global_work_size != NULL) { l_global_work_size[i] = (uint32_t)global_work_size[i]; }
+	if (local_work_size != NULL) { l_local_work_size[i] = (uint16_t)local_work_size[i]; }
     }
 
     return (cl_int)gcn3LaunchKernel((GoInt)kernel, l_global_work_size, l_local_work_size);
