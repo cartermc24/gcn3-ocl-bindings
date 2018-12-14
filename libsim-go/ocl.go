@@ -1,5 +1,7 @@
 package main
 
+// This empty comment is required by CGo, do not remove
+
 /*
  */
 import "C"
@@ -62,9 +64,9 @@ type CLKernel struct {
 
 /*
    CLKernelArg Types
-   0 -> GlobalPtr
-   1 -> LocalPtr
-   2 -> Primative
+   0: GlobalPtr
+   1: LocalPtr
+   2: Primative
 */
 type CLKernelArg struct {
 	idx      int
@@ -72,29 +74,6 @@ type CLKernelArg struct {
 	ptr_val  uint64
 	arg_type uint8
 }
-
-/*
-func createKernelArgInterface(args []CLKernelArg) interface{} {
-    f := make([]reflect.StructField, len(args))
-    for i, _ := range args {
-        arg_type := args[i].arg_type
-
-        if arg_type == 0 {
-            f[i].Type = reflect.TypeOf((*driver.GPUPtr) (nil)).Elem()
-        } else {
-            f[i].Type = reflect.TypeOf((*driver.LocalPtr) (nil)).Elem()
-        }
-
-        //f[i].Type = reflect.TypeOf(u)
-        f[i].Anonymous = true
-    }
-
-    r := reflect.New(reflect.StructOf(f)).Elem()
-    for i, u := range args {
-        r.Field(i).Set(reflect.ValueOf(u))
-    }
-    return r.Addr().Interface()
-*/
 
 //
 // Helpers
@@ -114,37 +93,14 @@ func convertArgsToBytes(cl_kernel_args []CLKernelArg) []byte {
 	var all_args []byte
 	for _, kernel_arg := range cl_kernel_args {
 		arg_bytes := make([]byte, 8)//unsafe.Sizeof(kernel_arg.ptr_val))
-		binary.LittleEndian.PutUint64(arg_bytes, uint64(kernel_arg.ptr_val)) // FIXME assumes 64-bit platform	
+		binary.LittleEndian.PutUint64(arg_bytes, uint64(kernel_arg.ptr_val)) // NOTE! Assumes 64-bit platform	
 		//fmt.Printf("[ocl-wrapper] Argument %i has bytes: [%s]\n", i, hex.Dump(arg_bytes))
 		all_args = append(all_args, arg_bytes...)
 	}
 
-	/*
-	arg_bytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(arg_bytes, 0)
-	all_args = append(all_args, arg_bytes...)
-
-	arg_bytes = make([]byte, 8)
-	binary.LittleEndian.PutUint64(arg_bytes, 400000)
-	all_args = append(all_args, arg_bytes...)
-
-	arg_bytes = make([]byte, 8)
-	binary.LittleEndian.PutUint64(arg_bytes, 800000)
-	all_args = append(all_args, arg_bytes...)
-
-	arg_bytes = make([]byte, 4)
-	binary.LittleEndian.PutUint32(arg_bytes, 100000)
-	all_args = append(all_args, arg_bytes...)
-	*/
-
-	offsets := make([]byte, 192)
-	all_args = append(all_args, offsets...)
-
-	/*
-	if len(all_args) % 64 != 0 {
-		fmt.Printf("[ocl-wrapper] Kernel arguments are not aligned to 64-bits\n")
-	}
-	*/
+// This offset was needed in earlier versions of the simulator, keeping just in-case this bug reappears...
+//	offsets := make([]byte, 192)
+//	all_args = append(all_args, offsets...)
 
 	//fmt.Printf("[ocl-wrapper] Arguments passed to kernel [%s]", hex.Dump(all_args))
 
@@ -192,11 +148,8 @@ func gcn3GetKernelInfo(kernel int, param_name int, param_value_size uint64, para
 		ptr_size = *(*uint64)(param_ptr_size)
 	}
 
-//	fmt.Printf("!!! KERNELID: %i !!!\n", kernel)
-
 	switch param_name {
 		case 0x1190: // CL_KERNEL_FUNCTION_NAME 
-//			fmt.Printf("!!! QUERIED NAME IS: %s !!!\n", kernel_map[kernel].kernel_name)
 			writeStringToPtr(param_ptr, ptr_size, kernel_map[kernel].kernel_name)
 	}
 
@@ -492,7 +445,7 @@ func gcn3EnqueueWriteBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 
 //	fmt.Printf("[ocl-wrapper] Wrote data to device: [%s] @ region: %02x\n", hex.Dump(back), *sim_buffer)
 
-	fmt.Printf("[ocl-wrapper] Enqueued Write Buffer for buffer ID %v\n", buffer)
+//	fmt.Printf("[ocl-wrapper] Enqueued Write Buffer for buffer ID %v\n", buffer)
 	return 0 // CL_SUCCESS
 }
 
@@ -515,7 +468,7 @@ func gcn3EnqueueReadBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 		cptr++
 	}
 
-	fmt.Printf("[ocl-wrapper] Enqueued Read Buffer for buffer ID %v\n", buffer)
+//	fmt.Printf("[ocl-wrapper] Enqueued Read Buffer for buffer ID %v\n", buffer)
 
 	return 0 // CL_SUCCESS
 }
@@ -529,32 +482,22 @@ func gcn3SetKernelArg(kernel int, arg_idx int, size int, ptr unsafe.Pointer) int
 	cl_kernel_arg.size = size
 
 	if ptr == nil {
-		fmt.Printf("[ocl-wrapper] Arg %i is a LOCAL\n", arg_idx)
+//		fmt.Printf("[ocl-wrapper] Arg %i is a LOCAL\n", arg_idx)
 		cl_kernel_arg.ptr_val = 0
 		cl_kernel_arg.arg_type = 1 // Local
 	} else {
 		ptr_value := uint64(*(*uint32)(ptr))
-		fmt.Printf("[ocl-wrapper] Input PTR is: %i\n", ptr_value)
+//		fmt.Printf("[ocl-wrapper] Input PTR is: %i\n", ptr_value)
 		if val, ok := buffer_map[(int)(ptr_value)]; ok {
-			fmt.Printf("[ocl-wrapper] Arg %i is a GLOBAL\n", arg_idx)
+//			fmt.Printf("[ocl-wrapper] Arg %i is a GLOBAL\n", arg_idx)
 			cl_kernel_arg.ptr_val = (uint64)(*val)
 			cl_kernel_arg.arg_type = 0 // Global
 		} else {
-			fmt.Printf("[ocl-wrapper] Arg %i is a PRIMATIVE\n", arg_idx)
+//			fmt.Printf("[ocl-wrapper] Arg %i is a PRIMATIVE\n", arg_idx)
 			cl_kernel_arg.ptr_val = ptr_value
 			cl_kernel_arg.arg_type = 2 // Primative
 		}
 	}
-
-/*
-	test := unsafe.Sizeof(reflect.TypeOf((int)(0)))
-
-	if uintptr(size) > test {
-		cl_kernel_arg.arg_type = uint8(1)
-	} else {
-		cl_kernel_arg.arg_type = uint8(0)
-	}
-*/
 
 	arg_list.PushBack(cl_kernel_arg)
 
@@ -577,7 +520,7 @@ func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_si
 	for i := 0; i < 3; i++ {
 		grid_args[i] = global[i] //*(*uint32)(global_work_size) //uint32
 		work_args[i] = local[i] //*(*uint16)(local_work_size)  //uint16
-		fmt.Printf("[ocl-wrapper] Dimention: %i, global: %u, local: %u\n", i, grid_args[i], work_args[i])
+//		fmt.Printf("[ocl-wrapper] Dimention: %i, global: %u, local: %u\n", i, grid_args[i], work_args[i])
 	}
 
 	cl_kernel := kernel_map[kernel]
@@ -595,27 +538,19 @@ func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_si
 		new_idx := kernel_arg.idx
 
 		if new_idx >= num_args || new_idx < 0 {
-			return -5 //FIXME add the right error
+			return -13 // CL_MISALIGNED_SUB_BUFFER_OFFSET
 		}
 
 		args[new_idx] = kernel_arg
 	}
 
-	/*
-	   var all_args []byte
-	   for _, kernel_arg := range args {
-	       all_args = append(all_args, kernel_arg.bytes...)
-	   }
-	*/
 	driverUpdateLDSPointers(sim_driver, sim_kernel, args)
 
 	all_args := convertArgsToBytes(args)
 
-	//kernel_arg_interface := createKernelArgInterface(args)
 	queue := sim_driver.CreateCommandQueue()
         sim_driver.EnqueueLaunchKernelWithArgs(queue, sim_kernel, grid_args, work_args, all_args)
         sim_driver.ExecuteAllCommands()
-	//sim_driver.LaunchKernel(sim_kernel, grid_args, work_args, all_args)
 
 	return 0 // CL_SUCCESS
 }

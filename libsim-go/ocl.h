@@ -17,7 +17,7 @@ typedef struct { const char *p; ptrdiff_t n; } _GoString_;
 /* Start of preamble from import "C" comments.  */
 
 
-#line 3 "ocl.go"
+#line 5 "ocl.go"
 
  
 #line 1 "cgo-generated-wrapper"

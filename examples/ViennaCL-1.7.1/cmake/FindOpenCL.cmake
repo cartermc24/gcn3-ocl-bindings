@@ -50,7 +50,7 @@ if(ENV_OPENCLROOT)
   find_library(
     OPENCL_LIBRARY
     NAMES sim_ocl
-    PATHS "/home/carter/simulator/gcn3-ocl-bindings/libsim-ocl/build"
+    PATHS "/home/ubuntu/gcn3-ocl-bindings/libsim-ocl/build"
     NO_DEFAULT_PATH  #uncomment this is you wish to surpress the use of default paths for OpenCL
     )
 else(ENV_OPENCLROOT)
@@ -63,7 +63,7 @@ else(ENV_OPENCLROOT)
   find_library(
     OPENCL_LIBRARY
     NAMES sim_ocl
-    PATHS "/home/carter/simulator/gcn3-ocl-bindings/libsim-ocl/build"
+    PATHS "/home/ubuntu/gcn3-ocl-bindings/libsim-ocl/build"
     NO_DEFAULT_PATH
     )
 endif(ENV_OPENCLROOT)
