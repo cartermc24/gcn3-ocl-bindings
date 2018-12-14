@@ -289,6 +289,9 @@ func gcn3GetDeviceInfo(device_id int, param_name int, param_value_size uint64, p
 		case 0x1030: // CL_DEVICE_EXTENSIONS
 			supported_ext := "cl_khr_global_int32_base_atomics cl_khr_global_int32_extended_atomics cl_khr_local_int32_base_atomics cl_khr_local_int32_extended_atomics cl_khr_fp64 cl_khr_byte_addressable_store cl_khr_icd cl_khr_gl_sharing"
 			writeStringToPtr(param_ptr, ptr_size, supported_ext)
+			if param_ptr_size != nil {
+                                *(*uint64)(param_ptr_size) = uint64(len(supported_ext) + 1) // For NULL-termination
+                        }
 		case 0x1035: // CL_DEVICE_HOST_UNIFIED_MEMORY
 			*(*uint)(param_ptr) = 0 // No host unified memory
 	}
