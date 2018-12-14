@@ -237,17 +237,32 @@ func gcn3GetProgramBuildInfo(program int, device_id int, param_name int, param_v
 //export gcn3GetDeviceInfo
 func gcn3GetDeviceInfo(device_id int, param_name int, param_value_size uint64, param_ptr unsafe.Pointer, param_ptr_size unsafe.Pointer) int {
 	var ptr_size uint64 = 210
-	if param_ptr_size != nil {
-		ptr_size = *(*uint64)(param_ptr_size)
-	}
+	ptr_size = param_value_size
 
 	switch param_name {
 		case 0x102B: // CL_DEVICE_NAME
 			writeStringToPtr(param_ptr, ptr_size, "GCN3 Simulated GPU")
+			if param_ptr_size != nil {
+				*(*uint64)(param_ptr_size) = uint64(len("GCN3 Simulated GPU "))
+			}
 		case 0x102C: // CL_DEVICE_VENDOR
 			writeStringToPtr(param_ptr, ptr_size, "NUCAR")
 		case 0x1000: // CL_DEVICE_TYPE
 			*(*uint)(param_ptr) = 4 // CL_DEVICE_TYPE_GPU
+		case 0x1006: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_CHAR
+			*(*uint)(param_ptr) = 4
+		case 0x1007: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_SHORT
+			*(*uint)(param_ptr) = 2
+		case 0x1008: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_INT
+			*(*uint)(param_ptr) = 1
+		case 0x1009: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_LONG
+			*(*uint)(param_ptr) = 1
+		case 0x1034: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_HALF
+			*(*uint)(param_ptr) = 0 // (n/a half)
+		case 0x100A: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_FLOAT
+			*(*uint)(param_ptr) = 1
+		case 0x100B: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE
+			*(*uint)(param_ptr) = 1
 		case 0x1002: // CL_DEVICE_MAX_COMPUTE_UNITS
 			*(*uint)(param_ptr) = 20
 		case 0x1004: // CL_DEVICE_MAX_WORK_GROUP_SIZE
@@ -470,7 +485,7 @@ func gcn3EnqueueWriteBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 
 	ptr_bytes := C.GoBytes(ptr, C.int(size))
 
-	sim_driver.MemoryCopyHostToDevice(*sim_buffer, ptr_bytes)
+	sim_driver.MemCopyH2D(*sim_buffer, ptr_bytes)
 
 //	fmt.Printf("[ocl-wrapper] Wrote data to device: [%s] @ region: %02x\n", hex.Dump(back), *sim_buffer)
 
@@ -487,7 +502,7 @@ func gcn3EnqueueReadBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 		ptr_bytes[i] = 0xFF
 	}
 
-	sim_driver.MemoryCopyDeviceToHost(ptr_bytes, *sim_buffer)
+	sim_driver.MemCopyD2H(ptr_bytes, *sim_buffer)
 
 //	fmt.Printf("[ocl-wrapper] Fetched data from device: [%s] @ region %02x\n", hex.Dump(ptr_bytes), *sim_buffer)
 
@@ -595,7 +610,7 @@ func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_si
 
 	//kernel_arg_interface := createKernelArgInterface(args)
 
-	sim_driver.LaunchKernelRuntimeArgs(sim_kernel, grid_args, work_args, all_args)
+	sim_driver.LaunchKernel(sim_kernel, grid_args, work_args, all_args)
 
 	return 0 // CL_SUCCESS
 }
