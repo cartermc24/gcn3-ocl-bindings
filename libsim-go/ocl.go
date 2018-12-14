@@ -489,7 +489,7 @@ func gcn3EnqueueWriteBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 
 //	fmt.Printf("[ocl-wrapper] Wrote data to device: [%s] @ region: %02x\n", hex.Dump(back), *sim_buffer)
 
-	//fmt.Printf("[ocl-wrapper] Enqueued Write Buffer for buffer ID %v\n", buffer)
+	fmt.Printf("[ocl-wrapper] Enqueued Write Buffer for buffer ID %v\n", buffer)
 	return 0 // CL_SUCCESS
 }
 
@@ -499,7 +499,7 @@ func gcn3EnqueueReadBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 
 	ptr_bytes := make([]byte, size)
 	for i := 0; i < size; i++ {
-		ptr_bytes[i] = 0xFF
+		ptr_bytes[i] = 0x00
 	}
 
 	sim_driver.MemCopyD2H(ptr_bytes, *sim_buffer)
@@ -512,7 +512,7 @@ func gcn3EnqueueReadBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 		cptr++
 	}
 
-	//fmt.Printf("[ocl-wrapper] Enqueued Read Buffer for buffer ID %v\n", buffer)
+	fmt.Printf("[ocl-wrapper] Enqueued Read Buffer for buffer ID %v\n", buffer)
 
 	return 0 // CL_SUCCESS
 }
@@ -526,18 +526,18 @@ func gcn3SetKernelArg(kernel int, arg_idx int, size int, ptr unsafe.Pointer) int
 	cl_kernel_arg.size = size
 
 	if ptr == nil {
-//		fmt.Printf("[ocl-wrapper] Arg %i is a LOCAL\n", arg_idx)
+		fmt.Printf("[ocl-wrapper] Arg %i is a LOCAL\n", arg_idx)
 		cl_kernel_arg.ptr_val = 0
 		cl_kernel_arg.arg_type = 1 // Local
 	} else {
 		ptr_value := uint64(*(*uint32)(ptr))
-//		fmt.Printf("[ocl-wrapper] Input PTR is: %i\n", ptr_value)
+		fmt.Printf("[ocl-wrapper] Input PTR is: %i\n", ptr_value)
 		if val, ok := buffer_map[(int)(ptr_value)]; ok {
-//			fmt.Printf("[ocl-wrapper] Arg %i is a GLOBAL\n", arg_idx)
+			fmt.Printf("[ocl-wrapper] Arg %i is a GLOBAL\n", arg_idx)
 			cl_kernel_arg.ptr_val = (uint64)(*val)
 			cl_kernel_arg.arg_type = 0 // Global
 		} else {
-//			fmt.Printf("[ocl-wrapper] Arg %i is a PRIMATIVE\n", arg_idx)
+			fmt.Printf("[ocl-wrapper] Arg %i is a PRIMATIVE\n", arg_idx)
 			cl_kernel_arg.ptr_val = ptr_value
 			cl_kernel_arg.arg_type = 2 // Primative
 		}
@@ -574,7 +574,7 @@ func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_si
 	for i := 0; i < 3; i++ {
 		grid_args[i] = global[i] //*(*uint32)(global_work_size) //uint32
 		work_args[i] = local[i] //*(*uint16)(local_work_size)  //uint16
-//		fmt.Printf("[ocl-wrapper] Dimention: %i, global: %u, local: %u\n", i, grid_args[i], work_args[i])
+		fmt.Printf("[ocl-wrapper] Dimention: %i, global: %u, local: %u\n", i, grid_args[i], work_args[i])
 	}
 
 	cl_kernel := kernel_map[kernel]
@@ -609,8 +609,10 @@ func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_si
 	all_args := convertArgsToBytes(args)
 
 	//kernel_arg_interface := createKernelArgInterface(args)
-
-	sim_driver.LaunchKernel(sim_kernel, grid_args, work_args, all_args)
+	queue := sim_driver.CreateCommandQueue()
+        sim_driver.EnqueueLaunchKernelWithArgs(queue, sim_kernel, grid_args, work_args, all_args)
+        sim_driver.ExecuteAllCommands()
+	//sim_driver.LaunchKernel(sim_kernel, grid_args, work_args, all_args)
 
 	return 0 // CL_SUCCESS
 }

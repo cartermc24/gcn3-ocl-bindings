@@ -13,7 +13,7 @@ void initialize_simulator() {
 cl_int clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms) {
     initialize_simulator();
 #ifdef TRACE
-    printf("[OCL-TRACE]: clGetPlatformIDs called with [%u, %p, %u]\n", num_entries, platforms, *num_platforms);
+    printf("[OCL-TRACE]: clGetPlatformIDs called with [%u, %p, %p]\n", num_entries, platforms, num_platforms);
 #endif
 
     if (num_platforms != NULL) {

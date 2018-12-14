@@ -23,8 +23,8 @@ const char *kernelSource =                                       "\n" \
 int main( int argc, char* argv[] )
 {
     // Length of vectors
-    unsigned int n = 100000;
- 
+    unsigned int n = 10000;
+
     // Host input vectors
     int *h_a;
     int *h_b;
@@ -57,7 +57,7 @@ int main( int argc, char* argv[] )
     for( i = 0; i < n; i++ )
     {
         h_a[i] = 50;//sinf(i)*sinf(i);
-        h_b[i] = 1;//cosf(i)*cosf(i);
+        h_b[i] = 50;//cosf(i)*cosf(i);
     }
  
     size_t globalSize, localSize;
@@ -123,8 +123,10 @@ int main( int argc, char* argv[] )
     int sum = 0;
     for(i=0; i<n; i++)
         sum += h_c[i];
+    printf("sum: %i\n", sum);
     printf("final result: %i\n", sum/(int)n);
- 
+    printf("should be: 100\n");
+
     // release OpenCL resources
     clReleaseMemObject(d_a);
     clReleaseMemObject(d_b);
