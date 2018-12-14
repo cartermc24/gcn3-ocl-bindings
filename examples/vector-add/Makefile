@@ -4,7 +4,7 @@ all: checkEnv clean vecAdd_cl vecAdd_cc_cl
 
 vecAdd_cl: vecAdd.c
 	mkdir -p bin
-	cc -o bin/vecAdd_cl vecAdd.c -L/home/ubuntu/gcn3-ocl-bindings/libsim-ocl/build -lsim_ocl -lm -lpthread -g
+	cc -o bin/vecAdd_cl vecAdd.c -L../../libsim-ocl/build -lsim_ocl -lm -lpthread -g
 
 vecAdd_double_cl: vecAdd.c
 	mkdir -p bin
