@@ -3,11 +3,11 @@ OpenCL Bindings for the GCN3 Multi-GPU Simulator
 
 ## Building
 ### To build the front-end OpenCL library automatically:
-1. Ensure the GCN3Sim simulator is installed (see getting started guide for GCN3)
+1. Ensure the GCN3Sim simulator is installed (see [getting started guide for GCN3](https://gitlab.com/akita/gcn3/blob/master/getting_started.md))
 2. Automatic: Run the build_ocl_frontend.sh script
 
 ### To build manually:
-1. Ensure the GCN3Sim simulator is installed (see getting started guide for GCN3)
+1. Ensure the GCN3Sim simulator is installed (see [getting started guide for GCN3](https://gitlab.com/akita/gcn3/blob/master/getting_started.md))
 2. Enter the libsim-go directory and run make
 3. Enter the libsim-ocl directory, create a build directory and cd into it
 4. Run "cmake .." and then "make"
