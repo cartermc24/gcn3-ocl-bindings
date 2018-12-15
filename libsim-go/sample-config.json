@@ -1,0 +1,8 @@
+{
+    "name": "GCN3 Simulated GPU From Config",
+    "vendor": "NUCAR",
+    "frequency": 1000,
+    "max_compute_units": 20,
+    "max_workgroup_size": 512,
+    "global_mem_size": 1063837696
+}
