@@ -20,7 +20,7 @@ import (
 	"debug/elf"
 
 	"gitlab.com/akita/akita"
-	//"gitlab.com/akita/gcn3"
+	"gitlab.com/akita/gcn3"
 	"gitlab.com/akita/gcn3/driver"
 	"gitlab.com/akita/gcn3/insts"
 	"gitlab.com/akita/gcn3/kernels"
@@ -79,13 +79,14 @@ type CLKernelArg struct {
 	arg_type uint8
 }
 
+// Fields have to be uppercase for unmarshalling to work
 type GPUConfig struct {
-	name               string
-	vendor             string
-	frequency          akita.Freq
-	max_compute_units  uint
-	max_workgroup_size uint
-	global_mem_size    uint
+	Name               string
+	Vendor             string
+	Frequency          akita.Freq
+	Max_compute_units  uint
+	Max_workgroup_size uint
+	Global_mem_size    uint
 }
 
 //
@@ -110,19 +111,21 @@ func processSimConfig() {
 
 	data, err := ioutil.ReadFile(config_file)
 	if err != nil {
-		fmt.Println("[ocl-wrapper] No config file found, using basic R9NanoPlatform")
-		_, _, sim_driver = platform.BuildR9NanoPlatform()
+		fmt.Println("[ocl-wrapper] Error: No config file found")
 		return
 	}
 
 	// Process Json
-	json.Unmarshal(data, &gpu_config)
+	err = json.Unmarshal(data, &gpu_config)
+	if err != nil {
+		fmt.Println("[ocl-wrapper] Error parsing JSON: ", err)
+	}
 
-	//var gpu *gcn3.GPU
-	_, _, sim_driver = platform.BuildR9NanoPlatform()
+	var gpu *gcn3.GPU
+	_, gpu, sim_driver = platform.BuildR9NanoPlatform()
 
 	// FIXME: This causes a panic for some reason
-	//gpu.Freq = gpu_config.frequency * akita.MHz
+	gpu.Freq = gpu_config.Frequency * akita.MHz
 }
 
 // Convert CLKernelArg struct slice into raw bytes
@@ -233,12 +236,12 @@ func gcn3GetDeviceInfo(device_id int, param_name int, param_value_size uint64, p
 
 	switch param_name {
 	case 0x102B: // CL_DEVICE_NAME
-		writeStringToPtr(param_ptr, ptr_size, "GCN3 Simulated GPU")
+		writeStringToPtr(param_ptr, ptr_size, gpu_config.Name)
 		if param_ptr_size != nil {
-			*(*uint64)(param_ptr_size) = uint64(len("GCN3 Simulated GPU "))
+			*(*uint64)(param_ptr_size) = uint64(len(gpu_config.Name))
 		}
 	case 0x102C: // CL_DEVICE_VENDOR
-		writeStringToPtr(param_ptr, ptr_size, "NUCAR")
+		writeStringToPtr(param_ptr, ptr_size, gpu_config.Vendor)
 	case 0x1000: // CL_DEVICE_TYPE
 		*(*uint)(param_ptr) = 4 // CL_DEVICE_TYPE_GPU
 	case 0x1006: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_CHAR
@@ -256,15 +259,15 @@ func gcn3GetDeviceInfo(device_id int, param_name int, param_value_size uint64, p
 	case 0x100B: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE
 		*(*uint)(param_ptr) = 1
 	case 0x1002: // CL_DEVICE_MAX_COMPUTE_UNITS
-		*(*uint)(param_ptr) = 20
+		*(*uint)(param_ptr) = gpu_config.Max_compute_units
 	case 0x1004: // CL_DEVICE_MAX_WORK_GROUP_SIZE
-		*(*uint)(param_ptr) = 512 //1024
+		*(*uint)(param_ptr) = gpu_config.Max_workgroup_size //1024
 	case 0x1023: // CL_DEVICE_LOCAL_MEM_SIZE
 		*(*uint)(param_ptr) = 24576 //49152
 	case 0x1022: // CL_DEVICE_LOCAL_MEM_TYPE
 		*(*uint)(param_ptr) = 0x1
 	case 0x101F: // CL_DEVICE_GLOBAL_MEM_SIZE
-		*(*uint)(param_ptr) = 1063837696 //8510701568
+		*(*uint)(param_ptr) = gpu_config.Global_mem_size //8510701568
 	case 0x1027: // CL_DEVICE_AVALIABLE
 		*(*uint)(param_ptr) = 1
 	case 0x1053: // CL_DEVICE_SVM_CAPABILITIES
