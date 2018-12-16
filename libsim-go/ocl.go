@@ -6,18 +6,21 @@ package main
  */
 import "C"
 import (
+	"bytes"
 	"container/list"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"unsafe"
 	"os"
-	"os/user"
 	"os/exec"
-	"bytes"
-//	"encoding/hex"
+	"os/user"
+	"unsafe"
+	//	"encoding/hex"
 	"debug/elf"
 
+	"gitlab.com/akita/akita"
+	"gitlab.com/akita/gcn3"
 	"gitlab.com/akita/gcn3/driver"
 	"gitlab.com/akita/gcn3/insts"
 	"gitlab.com/akita/gcn3/kernels"
@@ -26,6 +29,7 @@ import (
 
 // Globals
 var sim_driver *driver.Driver
+var gpu_config GPUConfig // FIXME: only support one gpu for now
 var program_map map[int]*CLProgram
 var buffer_map map[int]*driver.GPUPtr
 var kernel_map map[int]*CLKernel
@@ -33,7 +37,7 @@ var program_idx int = 0
 var buffer_idx int = 1 // Start at one to avoid conflict with C's NULL
 var kernel_idx int = 0
 
-// Hardcoded value
+// Hardcoded values
 var context_id int = 8
 var command_queue_id int = 12
 var platform_id int = 1
@@ -50,15 +54,15 @@ var device_id int = 0
 	3: Released
 */
 type CLProgram struct {
-	program_string string
-	program        []byte
-	build_status   int
+	program_string   string
+	program          []byte
+	build_status     int
 	build_status_msg string
 }
 
 type CLKernel struct {
-	arg_list *list.List
-	kernel   *insts.HsaCo
+	arg_list    *list.List
+	kernel      *insts.HsaCo
 	kernel_name string
 }
 
@@ -75,6 +79,16 @@ type CLKernelArg struct {
 	arg_type uint8
 }
 
+// Fields have to be uppercase for unmarshalling to work
+type GPUConfig struct {
+	Name               string
+	Vendor             string
+	Frequency          akita.Freq
+	Max_compute_units  uint
+	Max_workgroup_size uint
+	Global_mem_size    uint
+}
+
 //
 // Helpers
 //
@@ -83,8 +97,35 @@ func initializeSimulator() {
 	buffer_map = make(map[int]*driver.GPUPtr)
 	kernel_map = make(map[int]*CLKernel)
 	program_map = make(map[int]*CLProgram)
-	_, _, sim_driver, _ = platform.BuildEmuPlatform()
+	processSimConfig()
 	fmt.Println("[ocl-wrapper] Simulator Initialized\n")
+}
+
+func processSimConfig() {
+	usr, usr_err := user.Current()
+	if usr_err != nil {
+		fmt.Fprintf(os.Stderr, "[ocl-wrapper] Error: unable to get user information to locate config file\n")
+
+	}
+	config_file := usr.HomeDir + "/.simocl/config.json"
+
+	data, err := ioutil.ReadFile(config_file)
+	if err != nil {
+		fmt.Println("[ocl-wrapper] Error: No config file found")
+		return
+	}
+
+	// Process Json
+	err = json.Unmarshal(data, &gpu_config)
+	if err != nil {
+		fmt.Println("[ocl-wrapper] Error parsing JSON: ", err)
+	}
+
+	var gpu *gcn3.GPU
+	_, gpu, sim_driver = platform.BuildR9NanoPlatform()
+
+	// FIXME: This causes a panic for some reason
+	gpu.Freq = gpu_config.Frequency * akita.MHz
 }
 
 // Convert CLKernelArg struct slice into raw bytes
@@ -92,15 +133,15 @@ func initializeSimulator() {
 func convertArgsToBytes(cl_kernel_args []CLKernelArg) []byte {
 	var all_args []byte
 	for _, kernel_arg := range cl_kernel_args {
-		arg_bytes := make([]byte, 8)//unsafe.Sizeof(kernel_arg.ptr_val))
-		binary.LittleEndian.PutUint64(arg_bytes, uint64(kernel_arg.ptr_val)) // NOTE! Assumes 64-bit platform	
+		arg_bytes := make([]byte, 8)                                         //unsafe.Sizeof(kernel_arg.ptr_val))
+		binary.LittleEndian.PutUint64(arg_bytes, uint64(kernel_arg.ptr_val)) // NOTE! Assumes 64-bit platform
 		//fmt.Printf("[ocl-wrapper] Argument %i has bytes: [%s]\n", i, hex.Dump(arg_bytes))
 		all_args = append(all_args, arg_bytes...)
 	}
 
-// This offset was needed in earlier versions of the simulator, keeping just in-case this bug reappears...
-//	offsets := make([]byte, 192)
-//	all_args = append(all_args, offsets...)
+	// This offset was needed in earlier versions of the simulator, keeping just in-case this bug reappears...
+	//	offsets := make([]byte, 192)
+	//	all_args = append(all_args, offsets...)
 
 	//fmt.Printf("[ocl-wrapper] Arguments passed to kernel [%s]", hex.Dump(all_args))
 
@@ -149,8 +190,8 @@ func gcn3GetKernelInfo(kernel int, param_name int, param_value_size uint64, para
 	}
 
 	switch param_name {
-		case 0x1190: // CL_KERNEL_FUNCTION_NAME 
-			writeStringToPtr(param_ptr, ptr_size, kernel_map[kernel].kernel_name)
+	case 0x1190: // CL_KERNEL_FUNCTION_NAME
+		writeStringToPtr(param_ptr, ptr_size, kernel_map[kernel].kernel_name)
 	}
 
 	return 0 // CL_SUCCESS
@@ -164,28 +205,29 @@ func gcn3GetProgramBuildInfo(program int, device_id int, param_name int, param_v
 	}
 
 	switch param_name {
-		case 0x1181: // CL_PROGRAM_BUILD_STATUS
-			fmt.Printf("Program [%i] has build status [%i]\n", program, program_map[program].build_status)
-			if program_map[program].build_status == 0 {
-				*(*int)(param_ptr) = -1 //CL_BUILD_NONE
-			} else if program_map[program].build_status == 1 {
-				*(*int)(param_ptr) = -2 //CL_BUILD_ERROR
-			} else if program_map[program].build_status == 2 {
-				*(*int)(param_ptr) = 0 //CL_BUILD_SUCCESS
-			} else { // If we are in a weird state (like released) return CL_BUILD_NONE
-				*(*int)(param_ptr) = -1
-			}
-		case 0x1183: // CL_PROGRAM_BUILD_LOG
-			if program_map[program].build_status == 1 {
-				writeStringToPtr(param_ptr, ptr_size, program_map[program].build_status_msg)
-			} else {
-				writeStringToPtr(param_ptr, ptr_size, "No error log")
-			}
+	case 0x1181: // CL_PROGRAM_BUILD_STATUS
+		fmt.Printf("Program [%i] has build status [%i]\n", program, program_map[program].build_status)
+		if program_map[program].build_status == 0 {
+			*(*int)(param_ptr) = -1 //CL_BUILD_NONE
+		} else if program_map[program].build_status == 1 {
+			*(*int)(param_ptr) = -2 //CL_BUILD_ERROR
+		} else if program_map[program].build_status == 2 {
+			*(*int)(param_ptr) = 0 //CL_BUILD_SUCCESS
+		} else { // If we are in a weird state (like released) return CL_BUILD_NONE
+			*(*int)(param_ptr) = -1
+		}
+	case 0x1183: // CL_PROGRAM_BUILD_LOG
+		if program_map[program].build_status == 1 {
+			writeStringToPtr(param_ptr, ptr_size, program_map[program].build_status_msg)
+		} else {
+			writeStringToPtr(param_ptr, ptr_size, "No error log")
+		}
 	}
 
 	return 0 // CL_SUCCESS
 }
 
+// FIXME: Handle empty config
 
 //export gcn3GetDeviceInfo
 func gcn3GetDeviceInfo(device_id int, param_name int, param_value_size uint64, param_ptr unsafe.Pointer, param_ptr_size unsafe.Pointer) int {
@@ -193,60 +235,60 @@ func gcn3GetDeviceInfo(device_id int, param_name int, param_value_size uint64, p
 	ptr_size = param_value_size
 
 	switch param_name {
-		case 0x102B: // CL_DEVICE_NAME
-			writeStringToPtr(param_ptr, ptr_size, "GCN3 Simulated GPU")
-			if param_ptr_size != nil {
-				*(*uint64)(param_ptr_size) = uint64(len("GCN3 Simulated GPU "))
-			}
-		case 0x102C: // CL_DEVICE_VENDOR
-			writeStringToPtr(param_ptr, ptr_size, "NUCAR")
-		case 0x1000: // CL_DEVICE_TYPE
-			*(*uint)(param_ptr) = 4 // CL_DEVICE_TYPE_GPU
-		case 0x1006: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_CHAR
-			*(*uint)(param_ptr) = 4
-		case 0x1007: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_SHORT
-			*(*uint)(param_ptr) = 2
-		case 0x1008: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_INT
-			*(*uint)(param_ptr) = 1
-		case 0x1009: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_LONG
-			*(*uint)(param_ptr) = 1
-		case 0x1034: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_HALF
-			*(*uint)(param_ptr) = 0 // (n/a half)
-		case 0x100A: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_FLOAT
-			*(*uint)(param_ptr) = 1
-		case 0x100B: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE
-			*(*uint)(param_ptr) = 1
-		case 0x1002: // CL_DEVICE_MAX_COMPUTE_UNITS
-			*(*uint)(param_ptr) = 20
-		case 0x1004: // CL_DEVICE_MAX_WORK_GROUP_SIZE
-			*(*uint)(param_ptr) = 512//1024
-		case 0x1023: // CL_DEVICE_LOCAL_MEM_SIZE
-			*(*uint)(param_ptr) = 24576//49152
-		case 0x1022: // CL_DEVICE_LOCAL_MEM_TYPE
-			*(*uint)(param_ptr) = 0x1
-		case 0x101F: // CL_DEVICE_GLOBAL_MEM_SIZE
-			*(*uint)(param_ptr) = 1063837696//8510701568
-		case 0x1027: // CL_DEVICE_AVALIABLE
-			*(*uint)(param_ptr) = 1
-		case 0x1053: // CL_DEVICE_SVM_CAPABILITIES
-			*(*uint)(param_ptr) = 0 // Disable SVM
-		case 0x1005: // CL_DEVICE_MAX_WORK_ITEM_SIZE
-			max_wis := (*[3]C.size_t)(param_ptr)
-			max_wis[0] = 256//1024
-			max_wis[1] = 256//1024
-			max_wis[2] = 16//64
-		case 0x1003: // CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS
-			*(*uint)(param_ptr) = 3 // Always 3D
-		case 0x1001: // CL_DEVICE_VENDOR_ID
-			*(*uint)(param_ptr) = 0x1002 // Randomly chose 827 as vendor id
-		case 0x1030: // CL_DEVICE_EXTENSIONS
-			supported_ext := "cl_khr_global_int32_base_atomics cl_khr_global_int32_extended_atomics cl_khr_local_int32_base_atomics cl_khr_local_int32_extended_atomics cl_khr_fp64 cl_khr_byte_addressable_store cl_khr_icd cl_khr_gl_sharing"
-			writeStringToPtr(param_ptr, ptr_size, supported_ext)
-			if param_ptr_size != nil {
-                                *(*uint64)(param_ptr_size) = uint64(len(supported_ext) + 1) // For NULL-termination
-                        }
-		case 0x1035: // CL_DEVICE_HOST_UNIFIED_MEMORY
-			*(*uint)(param_ptr) = 0 // No host unified memory
+	case 0x102B: // CL_DEVICE_NAME
+		writeStringToPtr(param_ptr, ptr_size, gpu_config.Name)
+		if param_ptr_size != nil {
+			*(*uint64)(param_ptr_size) = uint64(len(gpu_config.Name))
+		}
+	case 0x102C: // CL_DEVICE_VENDOR
+		writeStringToPtr(param_ptr, ptr_size, gpu_config.Vendor)
+	case 0x1000: // CL_DEVICE_TYPE
+		*(*uint)(param_ptr) = 4 // CL_DEVICE_TYPE_GPU
+	case 0x1006: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_CHAR
+		*(*uint)(param_ptr) = 4
+	case 0x1007: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_SHORT
+		*(*uint)(param_ptr) = 2
+	case 0x1008: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_INT
+		*(*uint)(param_ptr) = 1
+	case 0x1009: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_LONG
+		*(*uint)(param_ptr) = 1
+	case 0x1034: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_HALF
+		*(*uint)(param_ptr) = 0 // (n/a half)
+	case 0x100A: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_FLOAT
+		*(*uint)(param_ptr) = 1
+	case 0x100B: // CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE
+		*(*uint)(param_ptr) = 1
+	case 0x1002: // CL_DEVICE_MAX_COMPUTE_UNITS
+		*(*uint)(param_ptr) = gpu_config.Max_compute_units
+	case 0x1004: // CL_DEVICE_MAX_WORK_GROUP_SIZE
+		*(*uint)(param_ptr) = gpu_config.Max_workgroup_size //1024
+	case 0x1023: // CL_DEVICE_LOCAL_MEM_SIZE
+		*(*uint)(param_ptr) = 24576 //49152
+	case 0x1022: // CL_DEVICE_LOCAL_MEM_TYPE
+		*(*uint)(param_ptr) = 0x1
+	case 0x101F: // CL_DEVICE_GLOBAL_MEM_SIZE
+		*(*uint)(param_ptr) = gpu_config.Global_mem_size //8510701568
+	case 0x1027: // CL_DEVICE_AVALIABLE
+		*(*uint)(param_ptr) = 1
+	case 0x1053: // CL_DEVICE_SVM_CAPABILITIES
+		*(*uint)(param_ptr) = 0 // Disable SVM
+	case 0x1005: // CL_DEVICE_MAX_WORK_ITEM_SIZE
+		max_wis := (*[3]C.size_t)(param_ptr)
+		max_wis[0] = 256 //1024
+		max_wis[1] = 256 //1024
+		max_wis[2] = 16  //64
+	case 0x1003: // CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS
+		*(*uint)(param_ptr) = 3 // Always 3D
+	case 0x1001: // CL_DEVICE_VENDOR_ID
+		*(*uint)(param_ptr) = 0x1002 // Randomly chose 827 as vendor id
+	case 0x1030: // CL_DEVICE_EXTENSIONS
+		supported_ext := "cl_khr_global_int32_base_atomics cl_khr_global_int32_extended_atomics cl_khr_local_int32_base_atomics cl_khr_local_int32_extended_atomics cl_khr_fp64 cl_khr_byte_addressable_store cl_khr_icd cl_khr_gl_sharing"
+		writeStringToPtr(param_ptr, ptr_size, supported_ext)
+		if param_ptr_size != nil {
+			*(*uint64)(param_ptr_size) = uint64(len(supported_ext) + 1) // For NULL-termination
+		}
+	case 0x1035: // CL_DEVICE_HOST_UNIFIED_MEMORY
+		*(*uint)(param_ptr) = 0 // No host unified memory
 	}
 
 	return 0 // CL_SUCCESS
@@ -266,9 +308,9 @@ func writeStringToPtr(ptr unsafe.Pointer, ptr_len uint64, str string) {
 	}
 
 	for i := uint64(0); i < str_len; i++ {
-                *(*C.uchar)(unsafe.Pointer(strptr)) = C.uchar(str[i])
-                strptr++
-        }
+		*(*C.uchar)(unsafe.Pointer(strptr)) = C.uchar(str[i])
+		strptr++
+	}
 
 	*(*C.uchar)(unsafe.Pointer(strptr)) = C.uchar(0)
 }
@@ -296,7 +338,7 @@ func gcn3CreateProgramWithSource(context int, program_string string) int {
 
 	program_idx += 1
 
-//	fmt.Printf("[ocl-wrapper] Created program with ID %v\n", program_idx-1)
+	//	fmt.Printf("[ocl-wrapper] Created program with ID %v\n", program_idx-1)
 
 	return program_idx - 1
 }
@@ -307,7 +349,7 @@ func gcn3BuildProgram(program_id int) int {
 	program_map[program_id].build_status = 1
 
 	// Write program source to file
-//	fmt.Printf("[ocl-wrapper] Writing CL source to temporary file\n")
+	//	fmt.Printf("[ocl-wrapper] Writing CL source to temporary file\n")
 	program_bytes := []byte(program_map[program_id].program_string)
 	write_err := ioutil.WriteFile("/tmp/prog.cl", program_bytes, 0644)
 	if write_err != nil {
@@ -316,7 +358,7 @@ func gcn3BuildProgram(program_id int) int {
 	}
 
 	// Run compiler
-//	fmt.Printf("[ocl-wrapper] Running clang-ocl\n")
+	//	fmt.Printf("[ocl-wrapper] Running clang-ocl\n")
 	usr, usr_err := user.Current()
 	if usr_err != nil {
 		fmt.Fprintf(os.Stderr, "[ocl-wrapper] Error: unable to get user information to locate compiler\n")
@@ -344,7 +386,7 @@ func gcn3BuildProgram(program_id int) int {
 		return -11 // CL_BUILD_PROGRAM_FAILURE
 	}
 
-//	fmt.Printf("[ocl-wrapper] CL source successfully compiled\n")
+	//	fmt.Printf("[ocl-wrapper] CL source successfully compiled\n")
 	hsacoBytes, err := ioutil.ReadFile("/tmp/prog.hsaco")
 	if err != nil {
 		fmt.Printf("[ocl-wrapper] Error building program: %v\n", err)
@@ -355,7 +397,7 @@ func gcn3BuildProgram(program_id int) int {
 	program_map[program_id].program = hsacoBytes
 	program_map[program_id].build_status = 2 // Build success
 
-//	fmt.Printf("[ocl-wrapper] Built program with ID %v\n", program_id)
+	//	fmt.Printf("[ocl-wrapper] Built program with ID %v\n", program_id)
 	return 0 // CL_SUCCESS
 }
 
@@ -378,7 +420,7 @@ func gcn3CreateKernelsInProgram(program_id int, num_kernels uint, kernels unsafe
 	var i = uint(0)
 	for _, symbol := range symbols {
 		*(*C.int)(unsafe.Pointer(kernelptr)) = C.int(gcn3CreateKernel(program_id, symbol.Name))
-//		fmt.Printf("[ocl-wrapper] Created kernel with name: [%s]\n", symbol.Name)
+		//		fmt.Printf("[ocl-wrapper] Created kernel with name: [%s]\n", symbol.Name)
 		kernelptr += uintptr(cl_kernel_size)
 		if i >= num_kernels {
 			break
@@ -431,7 +473,7 @@ func gcn3CreateBuffer(context int, size int) int {
 
 	buffer_idx += 1
 
-//	fmt.Printf("[ocl-wrapper] Allocated buffer of size: %v, wrapper ID: %v, sim addr: %v\n", size, buffer_idx-1, new_buffer)
+	//	fmt.Printf("[ocl-wrapper] Allocated buffer of size: %v, wrapper ID: %v, sim addr: %v\n", size, buffer_idx-1, new_buffer)
 	return buffer_idx - 1
 }
 
@@ -443,9 +485,9 @@ func gcn3EnqueueWriteBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 
 	sim_driver.MemCopyH2D(*sim_buffer, ptr_bytes)
 
-//	fmt.Printf("[ocl-wrapper] Wrote data to device: [%s] @ region: %02x\n", hex.Dump(back), *sim_buffer)
+	//	fmt.Printf("[ocl-wrapper] Wrote data to device: [%s] @ region: %02x\n", hex.Dump(back), *sim_buffer)
 
-//	fmt.Printf("[ocl-wrapper] Enqueued Write Buffer for buffer ID %v\n", buffer)
+	//	fmt.Printf("[ocl-wrapper] Enqueued Write Buffer for buffer ID %v\n", buffer)
 	return 0 // CL_SUCCESS
 }
 
@@ -460,7 +502,7 @@ func gcn3EnqueueReadBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 
 	sim_driver.MemCopyD2H(ptr_bytes, *sim_buffer)
 
-//	fmt.Printf("[ocl-wrapper] Fetched data from device: [%s] @ region %02x\n", hex.Dump(ptr_bytes), *sim_buffer)
+	//	fmt.Printf("[ocl-wrapper] Fetched data from device: [%s] @ region %02x\n", hex.Dump(ptr_bytes), *sim_buffer)
 
 	var cptr = uintptr(ptr)
 	for i := 0; i < size; i++ {
@@ -468,7 +510,7 @@ func gcn3EnqueueReadBuffer(buffer int, size int, ptr unsafe.Pointer) int {
 		cptr++
 	}
 
-//	fmt.Printf("[ocl-wrapper] Enqueued Read Buffer for buffer ID %v\n", buffer)
+	//	fmt.Printf("[ocl-wrapper] Enqueued Read Buffer for buffer ID %v\n", buffer)
 
 	return 0 // CL_SUCCESS
 }
@@ -482,18 +524,18 @@ func gcn3SetKernelArg(kernel int, arg_idx int, size int, ptr unsafe.Pointer) int
 	cl_kernel_arg.size = size
 
 	if ptr == nil {
-//		fmt.Printf("[ocl-wrapper] Arg %i is a LOCAL\n", arg_idx)
+		//		fmt.Printf("[ocl-wrapper] Arg %i is a LOCAL\n", arg_idx)
 		cl_kernel_arg.ptr_val = 0
 		cl_kernel_arg.arg_type = 1 // Local
 	} else {
 		ptr_value := uint64(*(*uint32)(ptr))
-//		fmt.Printf("[ocl-wrapper] Input PTR is: %i\n", ptr_value)
+		//		fmt.Printf("[ocl-wrapper] Input PTR is: %i\n", ptr_value)
 		if val, ok := buffer_map[(int)(ptr_value)]; ok {
-//			fmt.Printf("[ocl-wrapper] Arg %i is a GLOBAL\n", arg_idx)
+			//			fmt.Printf("[ocl-wrapper] Arg %i is a GLOBAL\n", arg_idx)
 			cl_kernel_arg.ptr_val = (uint64)(*val)
 			cl_kernel_arg.arg_type = 0 // Global
 		} else {
-//			fmt.Printf("[ocl-wrapper] Arg %i is a PRIMATIVE\n", arg_idx)
+			//			fmt.Printf("[ocl-wrapper] Arg %i is a PRIMATIVE\n", arg_idx)
 			cl_kernel_arg.ptr_val = ptr_value
 			cl_kernel_arg.arg_type = 2 // Primative
 		}
@@ -519,8 +561,8 @@ func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_si
 	// Copy data over
 	for i := 0; i < 3; i++ {
 		grid_args[i] = global[i] //*(*uint32)(global_work_size) //uint32
-		work_args[i] = local[i] //*(*uint16)(local_work_size)  //uint16
-//		fmt.Printf("[ocl-wrapper] Dimention: %i, global: %u, local: %u\n", i, grid_args[i], work_args[i])
+		work_args[i] = local[i]  //*(*uint16)(local_work_size)  //uint16
+		//		fmt.Printf("[ocl-wrapper] Dimention: %i, global: %u, local: %u\n", i, grid_args[i], work_args[i])
 	}
 
 	cl_kernel := kernel_map[kernel]
@@ -549,8 +591,8 @@ func gcn3LaunchKernel(kernel int, global_work_size unsafe.Pointer, local_work_si
 	all_args := convertArgsToBytes(args)
 
 	queue := sim_driver.CreateCommandQueue()
-        sim_driver.EnqueueLaunchKernelWithArgs(queue, sim_kernel, grid_args, work_args, all_args)
-        sim_driver.ExecuteAllCommands()
+	sim_driver.EnqueueLaunchKernelWithArgs(queue, sim_kernel, grid_args, work_args, all_args)
+	sim_driver.ExecuteAllCommands()
 
 	return 0 // CL_SUCCESS
 }
